@@ -5,10 +5,17 @@ using System.Text;
 using System.Collections;
 using System.Collections.Generic;
 
+public record struct Point(int X, int Y)
+{
+    public int ManhattanTo(int x, int y) => Math.Abs(x - X) + Math.Abs(y - Y);
+    public int ManhattanTo(Point other) => ManhattanTo(other.X, other.Y);
+
+    public override string ToString() => $"{X} {Y}";
+}
+
 public class Tile
 {
-    public readonly int X;
-    public readonly int Y;
+    public Point Point;
     public readonly int ScrapAmount;
     public readonly int Owner;
     public readonly int Units;
@@ -20,8 +27,7 @@ public class Tile
 
     public Tile(int x, int y, int scrapAmount, int owner, int units, bool recycler, bool canBuild, bool canSpawn, bool inRangeOfRecycler)
     {
-        X = x;
-        Y = y;
+        Point = new Point(x, y);
         ScrapAmount = scrapAmount;
         Owner = owner;
         Units = units;
@@ -119,7 +125,7 @@ class Player
                     int amount = 1; // TODO: pick amount of robots to spawn here
                     if (amount > 0)
                     {
-                        actions.Add($"SPAWN {amount} {tile.X} {tile.Y}");
+                        actions.Add($"SPAWN {amount} {tile.Point}");
                     }
                 }
 
@@ -128,7 +134,7 @@ class Player
                     bool shouldBuild = false; // TODO: pick whether to build recycler here
                     if (shouldBuild)
                     {
-                        actions.Add($"BUILD {tile.X} {tile.Y}");
+                        actions.Add($"BUILD {tile.Point}");
                     }
                 }
             }
@@ -139,7 +145,7 @@ class Player
                 if (target != null)
                 {
                     int amount = 1; // TODO: pick amount of units to move
-                    actions.Add($"MOVE {amount} {tile.X} {tile.Y} {target.X} {target.Y}");
+                    actions.Add($"MOVE {amount} {tile.Point} {target.Point}");
                 }
             }
 
