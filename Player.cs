@@ -139,13 +139,25 @@ class Player
                 }
             }
 
-            foreach (Tile tile in myUnits)
+            foreach (Tile myUnit in myUnits)
             {
-                Tile target = oppUnits.FirstOrDefault(); // TODO: pick a destination
+                Tile target = null;
+                int minDistance = int.MaxValue;
+
+                foreach (var oppUnit in oppUnits)
+                {
+                    var distance = myUnit.Point.ManhattanTo(oppUnit.Point);
+                    if (distance < minDistance)
+                    {
+                        target = oppUnit;
+                        minDistance = distance;
+                    }
+                }
+
                 if (target != null)
                 {
-                    int amount = 1; // TODO: pick amount of units to move
-                    actions.Add($"MOVE {amount} {tile.Point} {target.Point}");
+                    int amount = myUnit.Units;
+                    actions.Add($"MOVE {amount} {myUnit.Point} {target.Point}");
                 }
             }
 
