@@ -9,8 +9,13 @@ namespace FallChallenge2022;
 
 public readonly record struct Map(int Width, int Height)
 {
-    public IEnumerable<Point> Directions(Point point)
+    public IEnumerable<Point> Directions(Point point, bool withPoint = false)
     {
+        if (withPoint)
+        {
+            yield return point;
+        }
+
         // Right
         if (point.X + 1 < Width)
         {
@@ -111,37 +116,86 @@ internal static class Player
         {
             Init();
 
-            foreach(var tile in myTiles.Values)
-            {
-                if (tile.CanSpawn)
-                {
-                    if (MyMatter >= 10)
-                    {
-                        actions.Add($"SPAWN {1} {tile.Point}");
-                        MyMatter -= 10;
-                    }
-                }
+            Build();
 
-                if (tile.CanBuild)
-                {
-                    bool shouldBuild = false;
-                    if (shouldBuild)
-                    {
-                        actions.Add($"BUILD {tile.Point}");
-                    }
-                }
-            }
+            Spawn();
 
             CalcMoves();
 
-            if (actions.Any())
+            Console.WriteLine(actions.Any() ? string.Join(';', actions) : "WAIT");
+        }
+    }
+
+    private static void Spawn()
+    {
+        HashSet<Point> spawnedPoints = new HashSet<Point>();
+
+        while (MyMatter >= 10)
+        {
+            Tile spawnTile = null;
+            int minDistance = int.MaxValue;
+            foreach (var myTile in myTiles.Values)
             {
-                Console.WriteLine(string.Join(';', actions));
+                if (!myTile.CanSpawn ||
+                    spawnedPoints.Contains(myTile.Point))
+                {
+                    continue;
+                }
+
+                GetNearest(myTile.Point, oppUnits.Keys, out var distance);
+                if (distance < minDistance)
+                {
+                    spawnTile = myTile;
+                    minDistance = distance;
+                }
+            }
+
+            if (spawnTile != null)
+            {
+                actions.Add($"SPAWN {1} {spawnTile.Point}");
+                MyMatter -= 10;
+                spawnedPoints.Add(spawnTile.Point);
             }
             else
             {
-                Console.WriteLine("WAIT");
+                break;
             }
+        }
+    }
+
+    private static void Build()
+    {
+        if (MyMatter < 10)
+        {
+            return;
+        }
+
+        Tile buildTile = null;
+        int maxScrapAmount = 35;
+
+        foreach (var tile in myTiles.Values)
+        {
+            if (!tile.CanBuild || tile.ScrapAmount < 7)
+            {
+                continue;
+            }
+
+            var scrapAmount = Map.Directions(tile.Point, true)
+                .Select(p => Tiles[p])
+                .Where(p => !p.Recycler)
+                .Sum(t => t.ScrapAmount);
+
+            if (maxScrapAmount < scrapAmount)
+            {
+                buildTile = tile;
+                maxScrapAmount = scrapAmount;
+            }
+        }
+
+        if (buildTile != null)
+        {
+            actions.Add($"BUILD {buildTile.Point}");
+            MyMatter -= 10;
         }
     }
 
@@ -217,7 +271,7 @@ internal static class Player
     {
         foreach (var myUnit in myUnits.Values)
         {
-            var targets = GetNearest(myUnit.Point, oppTiles.Keys);
+            var targets = GetNearest(myUnit.Point, oppTiles.Keys, out _);
             var target = targets
                 .Select(p => Tiles[p])
                 .OrderByDescending(t => t.Units)
@@ -233,7 +287,7 @@ internal static class Player
                 .Where(t => !t.Recycler && t.ScrapAmount != 0)
                 .Select(t => t.Point);
 
-            var moves = GetNearest(target.Point, directions)
+            var moves = GetNearest(target.Point, directions, out _)
                 .Select(p => Tiles[p]);
 
             Tile bestMove = null;
@@ -268,10 +322,10 @@ internal static class Player
         }
     }
 
-    private static IEnumerable<Point> GetNearest(Point point, IEnumerable<Point> targets)
+    private static IEnumerable<Point> GetNearest(Point point, IEnumerable<Point> targets, out int minDistance)
     {
         List<Point> nearest = new List<Point>();
-        int minDistance = int.MaxValue;
+        minDistance = int.MaxValue;
 
         foreach (var target in targets)
         {
