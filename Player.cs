@@ -81,6 +81,8 @@ public class Tile
         CanSpawn = canSpawn;
         InRangeOfRecycler = inRangeOfRecycler;
     }
+
+    public bool IsHole => Recycler || ScrapAmount == 0;
 }
 
 internal static class Player
@@ -99,6 +101,7 @@ internal static class Player
     static readonly Dictionary<Point, Tile> myRecyclers = new();
     static readonly Dictionary<Point, Tile> oppRecyclers = new();
 
+    static readonly List<HashSet<Point>> islands = new();
     static readonly List<string> actions = new();
     static readonly HashSet<Point> spawnedPoints = new();
 
@@ -118,6 +121,8 @@ internal static class Player
         while (true)
         {
             Init();
+
+            DetectIslands();
 
             DefenceBuild();
 
@@ -248,9 +253,12 @@ internal static class Player
     {
         foreach (var myUnit in myUnits.Values)
         {
+            HashSet<Point> currentIsland = islands.FirstOrDefault(island => island.Contains(myUnit.Point));
+
             for (var u = 0; u < myUnit.Units; u++)
             {
                 var targets = oppWithNeutralTiles
+                    .Where(t => currentIsland != null && currentIsland.Contains(t.Key))
                     .Where(t => t.Value.MyForceScore == 0)
                     .Select(t => t.Key);
 
@@ -294,6 +302,37 @@ internal static class Player
         }
 
         return nearest;
+    }
+
+    private static void DetectIslands() {
+        islands.Clear();
+        HashSet<Point> computed = new ();
+        HashSet<Point> current = new ();
+
+        foreach ((var p, Tile t) in Tiles) {
+            if (t.IsHole) {
+                continue;
+            }
+            if (!computed.Contains(p)) {
+                Queue<Point> fifo = new ();
+                fifo.Enqueue(p);
+                computed.Add(p);
+
+                while (fifo.Count != 0) {
+                    Point e = fifo.Dequeue();
+                    foreach (Point direction in Map.Directions(e)) {
+                        Tile tile = Tiles[direction];
+                        if (!tile.IsHole && !computed.Contains(direction)) {
+                            fifo.Enqueue(direction);
+                            computed.Add(direction);
+                        }
+                    }
+                    current.Add(e);
+                }
+                islands.Add(new HashSet<Point>(current));
+                current.Clear();
+            }
+        }
     }
 
     private static void Init()
