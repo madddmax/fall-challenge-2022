@@ -68,7 +68,7 @@ public class Tile
     public double BuildScore;
     public double SpawnScore;
     public double MoveScore;
-    public double MyForceScore;
+    public int MyForceScore;
 
     public Tile(Point point, int scrapAmount, int owner, int units, bool recycler, bool canBuild, bool canSpawn, bool inRangeOfRecycler)
     {
@@ -93,6 +93,7 @@ internal static class Player
     static readonly Dictionary<Point, Tile> myTiles = new();
     static readonly Dictionary<Point, Tile> oppTiles = new();
     static readonly Dictionary<Point, Tile> neutralTiles = new();
+    static readonly Dictionary<Point, Tile> oppWithNeutralTiles = new();
     static readonly Dictionary<Point, Tile> myUnits = new();
     static readonly Dictionary<Point, Tile> oppUnits = new();
     static readonly Dictionary<Point, Tile> myRecyclers = new();
@@ -116,7 +117,9 @@ internal static class Player
         {
             Init();
 
-            Build();
+            DefenceBuild();
+
+            AttackBuild();
 
             Spawn();
 
@@ -137,6 +140,7 @@ internal static class Player
             foreach (var myTile in myTiles.Values)
             {
                 if (!myTile.CanSpawn ||
+                    myTile.Units >= 2 ||
                     spawnedPoints.Contains(myTile.Point))
                 {
                     continue;
@@ -163,7 +167,45 @@ internal static class Player
         }
     }
 
-    private static void Build()
+    private static void DefenceBuild()
+    {
+        if (MyMatter < 10)
+        {
+            return;
+        }
+
+        // attack
+        Tile buildTile = null;
+        int maxUnits = 2;
+
+        foreach (var tile in myTiles.Values)
+        {
+            if (!tile.CanBuild || tile.ScrapAmount < 2)
+            {
+                continue;
+            }
+
+            var units = Map.Directions(tile.Point, true)
+                .Select(p => Tiles[p])
+                .Where(p => p.Owner == OPP)
+                .Sum(t => t.Units);
+
+            if (maxUnits < units)
+            {
+                buildTile = tile;
+                maxUnits = units;
+            }
+        }
+
+        if (buildTile != null)
+        {
+            actions.Add($"BUILD {buildTile.Point}");
+            actions.Add("MESSAGE DefenceBuild");
+            MyMatter -= 10;
+        }
+    }
+
+    private static void AttackBuild()
     {
         if (MyMatter < 10)
         {
@@ -195,83 +237,16 @@ internal static class Player
         if (buildTile != null)
         {
             actions.Add($"BUILD {buildTile.Point}");
+            actions.Add("MESSAGE AttackBuild");
             MyMatter -= 10;
         }
-    }
-
-    private static void Init()
-    {
-        Tiles.Clear();
-        myTiles.Clear();
-        oppTiles.Clear();
-        neutralTiles.Clear();
-        myUnits.Clear();
-        oppUnits.Clear();
-        myRecyclers.Clear();
-        oppRecyclers.Clear();
-
-        var inputs = Console.ReadLine().Split(' ');
-        MyMatter = int.Parse(inputs[0]);
-        OppMatter = int.Parse(inputs[1]);
-
-        for (int y = 0; y < Map.Height; y++)
-        {
-            for (int x = 0; x < Map.Width; x++)
-            {
-                inputs = Console.ReadLine().Split(' ');
-                int scrapAmount = int.Parse(inputs[0]);
-                int owner = int.Parse(inputs[1]); // 1 = me, 0 = foe, -1 = neutral
-                int units = int.Parse(inputs[2]);
-                bool recycler = int.Parse(inputs[3]) == 1;
-                bool canBuild = int.Parse(inputs[4]) == 1;
-                bool canSpawn = int.Parse(inputs[5]) == 1;
-                bool inRangeOfRecycler = int.Parse(inputs[6]) == 1;
-
-                Point point = new Point(x, y);
-                Tile tile = new Tile(point, scrapAmount, owner, units, recycler, canBuild, canSpawn, inRangeOfRecycler);
-                Tiles.Add(point, tile);
-
-                if (tile.Owner == ME)
-                {
-                    myTiles.Add(point, tile);
-
-                    if (tile.Units > 0)
-                    {
-                        myUnits.Add(point, tile);
-                    }
-                    else if (tile.Recycler)
-                    {
-                        myRecyclers.Add(point, tile);
-                    }
-                }
-                else if (tile.Owner == OPP)
-                {
-                    oppTiles.Add(point, tile);
-
-                    if (tile.Units > 0)
-                    {
-                        oppUnits.Add(point, tile);
-                    }
-                    else if (tile.Recycler)
-                    {
-                        oppRecyclers.Add(point, tile);
-                    }
-                }
-                else
-                {
-                    neutralTiles.Add(point, tile);
-                }
-            }
-        }
-
-        actions.Clear();
     }
 
     private static void CalcMoves()
     {
         foreach (var myUnit in myUnits.Values)
         {
-            var targets = GetNearest(myUnit.Point, oppTiles.Keys, out _);
+            var targets = GetNearest(myUnit.Point, oppWithNeutralTiles.Keys, out _);
             var target = targets
                 .Select(p => Tiles[p])
                 .OrderByDescending(t => t.Units)
@@ -285,27 +260,42 @@ internal static class Player
             var directions = Map.Directions(myUnit.Point)
                 .Select(p => Tiles[p])
                 .Where(t => !t.Recycler && t.ScrapAmount != 0)
-                .Select(t => t.Point);
+                .Select(t => t.Point)
+                .ToList();
 
             var moves = GetNearest(target.Point, directions, out _)
                 .Select(p => Tiles[p]);
 
             Tile bestMove = null;
             int bestScore = 0;
-            foreach (var move in moves)
+            foreach (Tile move in moves)
             {
                 int score = 0;
-                if (move.Owner == OPP)
+                if (move.MyForceScore == 1)
                 {
-                    score = move.Units + 1;
-                }
-                else if (move.Owner == NOONE)
-                {
-                    score = 2;
+                    score = 1;
                 }
                 else
                 {
-                    score = 1;
+                    if (move.Owner == OPP)
+                    {
+                        score = move.Units + 3;
+                    }
+                    else if (move.Owner == NOONE)
+                    {
+                        score = 3;
+                    }
+                    else
+                    {
+                        if (move.Units == 0)
+                        {
+                            score = 2;
+                        }
+                        else
+                        {
+                            score = 1;
+                        }
+                    }
                 }
 
                 if (score > bestScore)
@@ -317,7 +307,8 @@ internal static class Player
 
             if (bestMove != null)
             {
-                actions.Add($"MOVE {myUnit.Units} {myUnit.Point} {bestMove.Point}");
+                bestMove.MyForceScore = 1;
+                actions.Add($"MOVE 1 {myUnit.Point} {bestMove.Point}");
             }
         }
     }
@@ -344,5 +335,82 @@ internal static class Player
         }
 
         return nearest;
+    }
+
+    private static void Init()
+    {
+        Tiles.Clear();
+        myTiles.Clear();
+        oppTiles.Clear();
+        neutralTiles.Clear();
+        oppWithNeutralTiles.Clear();
+        myUnits.Clear();
+        oppUnits.Clear();
+        myRecyclers.Clear();
+        oppRecyclers.Clear();
+
+        var inputs = Console.ReadLine().Split(' ');
+        MyMatter = int.Parse(inputs[0]);
+        OppMatter = int.Parse(inputs[1]);
+
+        for (int y = 0; y < Map.Height; y++)
+        {
+            for (int x = 0; x < Map.Width; x++)
+            {
+                inputs = Console.ReadLine().Split(' ');
+                int scrapAmount = int.Parse(inputs[0]);
+                int owner = int.Parse(inputs[1]); // 1 = me, 0 = foe, -1 = neutral
+                int units = int.Parse(inputs[2]);
+                bool recycler = int.Parse(inputs[3]) == 1;
+                bool canBuild = int.Parse(inputs[4]) == 1;
+                bool canSpawn = int.Parse(inputs[5]) == 1;
+                bool inRangeOfRecycler = int.Parse(inputs[6]) == 1;
+
+                Point point = new Point(x, y);
+                Tile tile = new Tile(point, scrapAmount, owner, units, recycler, canBuild, canSpawn, inRangeOfRecycler);
+                Tiles.Add(point, tile);
+
+                if (tile.ScrapAmount == 0 ||
+                    tile.Recycler)
+                {
+                    continue;
+                }
+
+                if (tile.Owner == ME)
+                {
+                    myTiles.Add(point, tile);
+
+                    if (tile.Units > 0)
+                    {
+                        myUnits.Add(point, tile);
+                    }
+                    else if (tile.Recycler)
+                    {
+                        myRecyclers.Add(point, tile);
+                    }
+                }
+                else if (tile.Owner == OPP)
+                {
+                    oppTiles.Add(point, tile);
+                    oppWithNeutralTiles.Add(point, tile);
+
+                    if (tile.Units > 0)
+                    {
+                        oppUnits.Add(point, tile);
+                    }
+                    else if (tile.Recycler)
+                    {
+                        oppRecyclers.Add(point, tile);
+                    }
+                }
+                else
+                {
+                    neutralTiles.Add(point, tile);
+                    oppWithNeutralTiles.Add(point, tile);
+                }
+            }
+        }
+
+        actions.Clear();
     }
 }
