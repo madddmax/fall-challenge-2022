@@ -100,6 +100,8 @@ internal static class Player
     static readonly Dictionary<Point, Tile> oppRecyclers = new();
 
     static readonly List<string> actions = new();
+    static readonly HashSet<Point> spawnedPoints = new();
+
     static Map Map;
     static int MyMatter;
     static int OppMatter;
@@ -131,8 +133,6 @@ internal static class Player
 
     private static void Spawn()
     {
-        HashSet<Point> spawnedPoints = new HashSet<Point>();
-
         while (MyMatter >= 10)
         {
             Tile spawnTile = null;
@@ -156,9 +156,9 @@ internal static class Player
 
             if (spawnTile != null)
             {
-                actions.Add($"SPAWN {1} {spawnTile.Point}");
                 MyMatter -= 10;
                 spawnedPoints.Add(spawnTile.Point);
+                actions.Add($"SPAWN {1} {spawnTile.Point}");
             }
             else
             {
@@ -185,7 +185,7 @@ internal static class Player
                 continue;
             }
 
-            var units = Map.Directions(tile.Point, true)
+            var units = Map.Directions(tile.Point)
                 .Select(p => Tiles[p])
                 .Where(p => p.Owner == OPP)
                 .Sum(t => t.Units);
@@ -199,9 +199,10 @@ internal static class Player
 
         if (buildTile != null)
         {
-            actions.Add($"BUILD {buildTile.Point}");
-            actions.Add("MESSAGE DefenceBuild");
             MyMatter -= 10;
+            spawnedPoints.Add(buildTile.Point);
+            actions.Add("MESSAGE DefenceBuild");
+            actions.Add($"BUILD {buildTile.Point}");
         }
     }
 
@@ -236,9 +237,10 @@ internal static class Player
 
         if (buildTile != null)
         {
-            actions.Add($"BUILD {buildTile.Point}");
-            actions.Add("MESSAGE AttackBuild");
             MyMatter -= 10;
+            spawnedPoints.Add(buildTile.Point);
+            actions.Add("MESSAGE AttackBuild");
+            actions.Add($"BUILD {buildTile.Point}");
         }
     }
 
@@ -246,69 +248,26 @@ internal static class Player
     {
         foreach (var myUnit in myUnits.Values)
         {
-            var targets = GetNearest(myUnit.Point, oppWithNeutralTiles.Keys, out _);
-            var target = targets
-                .Select(p => Tiles[p])
-                .OrderByDescending(t => t.Units)
-                .FirstOrDefault();
-
-            if (target == null)
+            for (var u = 0; u < myUnit.Units; u++)
             {
-                continue;
-            }
+                var targets = oppWithNeutralTiles
+                    .Where(t => t.Value.MyForceScore == 0)
+                    .Select(t => t.Key);
 
-            var directions = Map.Directions(myUnit.Point)
-                .Select(p => Tiles[p])
-                .Where(t => !t.Recycler && t.ScrapAmount != 0)
-                .Select(t => t.Point)
-                .ToList();
+                var nearestTargets = GetNearest(myUnit.Point, targets, out _);
 
-            var moves = GetNearest(target.Point, directions, out _)
-                .Select(p => Tiles[p]);
+                var target = nearestTargets
+                    .Select(p => Tiles[p])
+                    .OrderByDescending(t => t.Units)
+                    .FirstOrDefault();
 
-            Tile bestMove = null;
-            int bestScore = 0;
-            foreach (Tile move in moves)
-            {
-                int score = 0;
-                if (move.MyForceScore == 1)
+                if (target == null)
                 {
-                    score = 1;
-                }
-                else
-                {
-                    if (move.Owner == OPP)
-                    {
-                        score = move.Units + 3;
-                    }
-                    else if (move.Owner == NOONE)
-                    {
-                        score = 3;
-                    }
-                    else
-                    {
-                        if (move.Units == 0)
-                        {
-                            score = 2;
-                        }
-                        else
-                        {
-                            score = 1;
-                        }
-                    }
+                    continue;
                 }
 
-                if (score > bestScore)
-                {
-                    bestMove = move;
-                    bestScore = score;
-                }
-            }
-
-            if (bestMove != null)
-            {
-                bestMove.MyForceScore = 1;
-                actions.Add($"MOVE 1 {myUnit.Point} {bestMove.Point}");
+                target.MyForceScore = 1;
+                actions.Add($"MOVE 1 {myUnit.Point} {target.Point}");
             }
         }
     }
@@ -349,6 +308,9 @@ internal static class Player
         myRecyclers.Clear();
         oppRecyclers.Clear();
 
+        actions.Clear();
+        spawnedPoints.Clear();
+
         var inputs = Console.ReadLine().Split(' ');
         MyMatter = int.Parse(inputs[0]);
         OppMatter = int.Parse(inputs[1]);
@@ -370,47 +332,45 @@ internal static class Player
                 Tile tile = new Tile(point, scrapAmount, owner, units, recycler, canBuild, canSpawn, inRangeOfRecycler);
                 Tiles.Add(point, tile);
 
-                if (tile.ScrapAmount == 0 ||
-                    tile.Recycler)
-                {
-                    continue;
-                }
-
                 if (tile.Owner == ME)
                 {
-                    myTiles.Add(point, tile);
-
-                    if (tile.Units > 0)
-                    {
-                        myUnits.Add(point, tile);
-                    }
-                    else if (tile.Recycler)
+                    if (tile.Recycler)
                     {
                         myRecyclers.Add(point, tile);
+                    }
+                    else
+                    {
+                        myTiles.Add(point, tile);
+
+                        if (tile.Units > 0)
+                        {
+                            myUnits.Add(point, tile);
+                        }
                     }
                 }
                 else if (tile.Owner == OPP)
                 {
-                    oppTiles.Add(point, tile);
-                    oppWithNeutralTiles.Add(point, tile);
-
-                    if (tile.Units > 0)
-                    {
-                        oppUnits.Add(point, tile);
-                    }
-                    else if (tile.Recycler)
+                    if (tile.Recycler)
                     {
                         oppRecyclers.Add(point, tile);
                     }
+                    else
+                    {
+                        oppTiles.Add(point, tile);
+                        oppWithNeutralTiles.Add(point, tile);
+
+                        if (tile.Units > 0)
+                        {
+                            oppUnits.Add(point, tile);
+                        }
+                    }
                 }
-                else
+                else if (tile.ScrapAmount != 0)
                 {
                     neutralTiles.Add(point, tile);
                     oppWithNeutralTiles.Add(point, tile);
                 }
             }
         }
-
-        actions.Clear();
     }
 }
