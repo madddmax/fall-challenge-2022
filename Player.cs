@@ -253,16 +253,26 @@ internal static class Player
     {
         foreach (var myUnit in myUnits.Values)
         {
-            HashSet<Point> currentIsland = islands.FirstOrDefault(island => island.Contains(myUnit.Point));
+            HashSet<Point> currentIsland = islands.FirstOrDefault(island =>
+                island.Contains(myUnit.Point)
+            );
 
             for (var u = 0; u < myUnit.Units; u++)
             {
-                var targets = oppWithNeutralTiles
+                var targetsInIsland = oppWithNeutralTiles
                     .Where(t => currentIsland != null && currentIsland.Contains(t.Key))
+                    .ToList();
+
+                var targets = targetsInIsland
                     .Where(t => t.Value.MyForceScore == 0)
                     .Select(t => t.Key);
 
-                var nearestTargets = GetNearest(myUnit.Point, targets, out _);
+                var nearestTargets = GetNearest(myUnit.Point, targets, out _).ToList();
+                if (!nearestTargets.Any())
+                {
+                    targets = targetsInIsland.Select(t => t.Key);
+                    nearestTargets = GetNearest(myUnit.Point, targets, out _).ToList();
+                }
 
                 var target = nearestTargets
                     .Select(p => Tiles[p])
@@ -274,7 +284,7 @@ internal static class Player
                     continue;
                 }
 
-                target.MyForceScore = 1;
+                target.MyForceScore += 1;
                 actions.Add($"MOVE 1 {myUnit.Point} {target.Point}");
             }
         }
