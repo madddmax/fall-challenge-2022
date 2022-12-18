@@ -261,6 +261,7 @@ internal static class Player
             {
                 var targetsInIsland = oppWithNeutralTiles
                     .Where(t => currentIsland != null && currentIsland.Contains(t.Key))
+                    .Where(t => !t.Value.InRangeOfRecycler || t.Value.ScrapAmount > 1)
                     .ToList();
 
                 var targets = targetsInIsland
