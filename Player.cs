@@ -83,6 +83,8 @@ public class Tile
     }
 
     public bool IsHole => Recycler || ScrapAmount == 0;
+
+    public bool TurnToHole => InRangeOfRecycler && ScrapAmount == 1;
 }
 
 internal static class Player
@@ -146,12 +148,32 @@ internal static class Player
             {
                 if (!myTile.CanSpawn ||
                     myTile.Units >= 2 ||
+                    myTile.TurnToHole ||
                     spawnedPoints.Contains(myTile.Point))
                 {
                     continue;
                 }
 
-                GetNearest(myTile.Point, oppUnits.Keys, out var distance);
+                HashSet<Point> currentIsland = islands.FirstOrDefault(island =>
+                    island.Contains(myTile.Point)
+                );
+
+                var targetTiles = oppUnits.Values.ToList();
+                if (currentIsland != null)
+                {
+                    targetTiles = currentIsland
+                        .Select(p => Tiles[p])
+                        .Where(t => !t.TurnToHole && t.Owner != ME)
+                        .ToList();
+                }
+
+                bool allMy = targetTiles.All(t => t.Owner == ME);
+                if (allMy)
+                {
+                    continue;
+                }
+
+                GetNearest(myTile.Point, targetTiles.Select(t => t.Point), out var distance);
                 if (distance < minDistance)
                 {
                     spawnTile = myTile;
@@ -261,7 +283,7 @@ internal static class Player
             {
                 var targetsInIsland = oppWithNeutralTiles
                     .Where(t => currentIsland != null && currentIsland.Contains(t.Key))
-                    .Where(t => !t.Value.InRangeOfRecycler || t.Value.ScrapAmount > 1)
+                    .Where(t => !t.Value.TurnToHole)
                     .ToList();
 
                 var targets = targetsInIsland
