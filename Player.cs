@@ -163,7 +163,7 @@ internal static class Player
                 {
                     targetTiles = currentIsland
                         .Select(p => Tiles[p])
-                        .Where(t => !t.TurnToHole && t.Owner != ME)
+                        .Where(t => !t.TurnToHole && t.Owner != ME && t.Owner != NOONE)
                         .ToList();
                 }
 
