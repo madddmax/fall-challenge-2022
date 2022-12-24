@@ -40,6 +40,23 @@ public readonly record struct Map(int Width, int Height)
             yield return new Point(point.X, point.Y - 1);
         }
     }
+
+    public static Point Center(List<Point> points)
+    {
+        int x = 0;
+        int y = 0;
+
+        foreach (var point in points)
+        {
+            x += point.X;
+            y += point.Y;
+        }
+
+        x /= points.Count;
+        y /= points.Count;
+
+        return new Point(x, y);
+    }
 }
 
 public readonly record struct Point(int X, int Y)
@@ -108,6 +125,8 @@ internal static class Player
     static readonly HashSet<Point> spawnedPoints = new();
 
     static Map Map;
+    static Point Center;
+
     static int MyMatter;
     static int OppMatter;
 
@@ -167,12 +186,6 @@ internal static class Player
                         .ToList();
                 }
 
-                bool allMy = targetTiles.All(t => t.Owner == ME);
-                if (allMy)
-                {
-                    continue;
-                }
-
                 GetNearest(myTile.Point, targetTiles.Select(t => t.Point), out var distance);
                 if (distance < minDistance)
                 {
@@ -228,7 +241,7 @@ internal static class Player
         {
             MyMatter -= 10;
             spawnedPoints.Add(buildTile.Point);
-            actions.Add("MESSAGE DefenceBuild");
+            actions.Add("MESSAGE Catching up Nixxa");
             actions.Add($"BUILD {buildTile.Point}");
         }
     }
@@ -266,7 +279,7 @@ internal static class Player
         {
             MyMatter -= 10;
             spawnedPoints.Add(buildTile.Point);
-            actions.Add("MESSAGE AttackBuild");
+            actions.Add("MESSAGE Go go go");
             actions.Add($"BUILD {buildTile.Point}");
         }
     }
@@ -279,13 +292,13 @@ internal static class Player
                 island.Contains(myUnit.Point)
             );
 
+            var targetsInIsland = oppWithNeutralTiles
+                .Where(t => currentIsland != null && currentIsland.Contains(t.Key))
+                .Where(t => !t.Value.TurnToHole)
+                .ToList();
+
             for (var u = 0; u < myUnit.Units; u++)
             {
-                var targetsInIsland = oppWithNeutralTiles
-                    .Where(t => currentIsland != null && currentIsland.Contains(t.Key))
-                    .Where(t => !t.Value.TurnToHole)
-                    .ToList();
-
                 var targets = targetsInIsland
                     .Where(t => t.Value.MyForceScore == 0)
                     .Select(t => t.Key);
@@ -293,6 +306,7 @@ internal static class Player
                 var nearestTargets = GetNearest(myUnit.Point, targets, out _).ToList();
                 if (!nearestTargets.Any())
                 {
+                    // MyForceScore > 0
                     targets = targetsInIsland.Select(t => t.Key);
                     nearestTargets = GetNearest(myUnit.Point, targets, out _).ToList();
                 }
@@ -300,6 +314,7 @@ internal static class Player
                 var target = nearestTargets
                     .Select(p => Tiles[p])
                     .OrderByDescending(t => t.Units)
+                    .ThenByDescending(t => t.Point.ManhattanTo(Center))
                     .FirstOrDefault();
 
                 if (target == null)
@@ -444,5 +459,7 @@ internal static class Player
                 }
             }
         }
+
+        Center = Map.Center(myTiles.Keys.ToList());
     }
 }
