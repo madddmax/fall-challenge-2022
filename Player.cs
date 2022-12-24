@@ -284,8 +284,8 @@ internal static class Player
         while (MyMatter >= 10)
         {
             Tile buildTile = null;
-            int maxScrapAmount = Map.Big ? 24 : 29;
-            int maxUnits = 2;
+            int maxScrapAmount = Map.Big ? 19 : 24;
+            int maxUnits = 1;
 
             foreach (var tile in myTiles.Values)
             {
