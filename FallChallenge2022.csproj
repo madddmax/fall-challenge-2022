@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <AssemblyName>max_v8</AssemblyName>
+        <AssemblyName>max_v9</AssemblyName>
         <TargetFramework>net6.0</TargetFramework>
         <LangVersion>latest</LangVersion>
     </PropertyGroup>

@@ -1,14 +1,14 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text;
 
 namespace FallChallenge2022;
 
 public readonly record struct Map(int Width, int Height)
 {
+    public readonly Point Center = new(Width / 2, Height / 2);
+    public bool Big => Width >= 18;
+
     public IEnumerable<Point> Directions(Point point, bool withPoint = false)
     {
         if (withPoint)
@@ -41,7 +41,7 @@ public readonly record struct Map(int Width, int Height)
         }
     }
 
-    public static Point Center(List<Point> points)
+    public static Point CenterRange(List<Point> points)
     {
         int x = 0;
         int y = 0;
@@ -61,11 +61,7 @@ public readonly record struct Map(int Width, int Height)
 
 public readonly record struct Point(int X, int Y)
 {
-    public int ManhattanTo(int x, int y) => Math.Abs(x - X) + Math.Abs(y - Y);
-    public int ManhattanTo(Point other) => ManhattanTo(other.X, other.Y);
-
-    public double SqrEuclideanTo(int x, int y) => Math.Pow(x - X, 2) + Math.Pow(y - Y, 2);
-    public double SqrEuclideanTo(Point other) => SqrEuclideanTo(other.X, other.Y);
+    public int ManhattanTo(Point other) => Math.Abs(other.X - X) + Math.Abs(other.Y - Y);
 
     public override string ToString() => $"{X} {Y}";
 }
@@ -75,16 +71,13 @@ public class Tile
     public readonly Point Point;
     public readonly int ScrapAmount;
     public readonly int Owner;
-    public readonly int Units;
+    public int Units;
 
-    public readonly bool Recycler;
+    public bool Recycler;
     public readonly bool CanBuild;
     public readonly bool CanSpawn;
     public readonly bool InRangeOfRecycler;
 
-    public double BuildScore;
-    public double SpawnScore;
-    public double MoveScore;
     public int MyForceScore;
 
     public Tile(Point point, int scrapAmount, int owner, int units, bool recycler, bool canBuild, bool canSpawn, bool inRangeOfRecycler)
@@ -118,14 +111,16 @@ internal static class Player
     static readonly Dictionary<Point, Tile> myUnits = new();
     static readonly Dictionary<Point, Tile> oppUnits = new();
     static readonly Dictionary<Point, Tile> myRecyclers = new();
+    static readonly HashSet<Point> myRecyclersRange = new();
     static readonly Dictionary<Point, Tile> oppRecyclers = new();
 
-    static readonly List<HashSet<Point>> islands = new();
+    static List<HashSet<Point>> Islands = new();
     static readonly List<string> actions = new();
     static readonly HashSet<Point> spawnedPoints = new();
 
+    static bool End;
     static Map Map;
-    static Point Center;
+    static Point MyCenter;
 
     static int MyMatter;
     static int OppMatter;
@@ -138,16 +133,15 @@ internal static class Player
         int height = int.Parse(inputs[1]);
         Map = new Map(width, height);
 
-        // game loop
         while (true)
         {
             Init();
 
-            DetectIslands();
+            End = EndGame();
 
-            DefenceBuild();
+            Build();
 
-            AttackBuild();
+            Islands = DetectIslands();
 
             Spawn();
 
@@ -173,7 +167,7 @@ internal static class Player
                     continue;
                 }
 
-                HashSet<Point> currentIsland = islands.FirstOrDefault(island =>
+                HashSet<Point> currentIsland = Islands.FirstOrDefault(island =>
                     island.Contains(myTile.Point)
                 );
 
@@ -182,7 +176,7 @@ internal static class Player
                 {
                     targetTiles = currentIsland
                         .Select(p => Tiles[p])
-                        .Where(t => !t.TurnToHole && t.Owner != ME && t.Owner != NOONE)
+                        .Where(t => !t.TurnToHole && (!End && t.Owner == OPP) || (End && t.Owner == NOONE))
                         .ToList();
                 }
 
@@ -207,88 +201,153 @@ internal static class Player
         }
     }
 
-    private static void DefenceBuild()
+    private static bool EndGame()
     {
-        if (MyMatter < 10)
+        bool endGame = true;
+        foreach (var myTile in myTiles.Values)
         {
-            return;
-        }
-
-        // attack
-        Tile buildTile = null;
-        int maxUnits = 2;
-
-        foreach (var tile in myTiles.Values)
-        {
-            if (!tile.CanBuild || tile.ScrapAmount < 2)
+            if (!myTile.CanSpawn || myTile.TurnToHole)
             {
                 continue;
             }
 
-            var units = Map.Directions(tile.Point)
-                .Select(p => Tiles[p])
-                .Where(p => p.Owner == OPP)
-                .Sum(t => t.Units);
+            HashSet<Point> currentIsland = Islands.FirstOrDefault(island =>
+                island.Contains(myTile.Point)
+            );
 
-            if (maxUnits < units)
+            if (currentIsland == null)
             {
-                buildTile = tile;
-                maxUnits = units;
+                endGame = false;
+                break;
+            }
+
+            bool anyOpp = currentIsland
+                .Select(p => Tiles[p])
+                .Any(t => !t.TurnToHole && t.Owner == OPP);
+
+            if (anyOpp)
+            {
+                endGame = false;
+                break;
             }
         }
 
-        if (buildTile != null)
-        {
-            MyMatter -= 10;
-            spawnedPoints.Add(buildTile.Point);
-            actions.Add("MESSAGE Catching up Nixxa");
-            actions.Add($"BUILD {buildTile.Point}");
-        }
+        return endGame;
     }
 
-    private static void AttackBuild()
+    private record struct BuildResult(int Scrap, int Holes, int OppUnits, int OppTiles);
+
+    private static BuildResult CalcBuild(Point recyclerPoint)
     {
-        if (MyMatter < 10)
-        {
-            return;
-        }
+        var result = new BuildResult();
 
-        Tile buildTile = null;
-        int maxScrapAmount = 35;
+        var recyclerTile = Tiles[recyclerPoint];
+        var otherTiles = Map
+            .Directions(recyclerPoint, true)
+            .Select(p => Tiles[p]);
 
-        foreach (var tile in myTiles.Values)
+        foreach (var tile in otherTiles)
         {
-            if (!tile.CanBuild || tile.ScrapAmount < 7)
+            if (tile.Owner == OPP)
+            {
+                result.OppTiles += 1;
+                result.OppUnits += tile.Units;
+            }
+
+            if (myRecyclersRange.Contains(tile.Point))
             {
                 continue;
             }
 
-            var scrapAmount = Map.Directions(tile.Point, true)
-                .Select(p => Tiles[p])
-                .Where(p => !p.Recycler)
-                .Sum(t => t.ScrapAmount);
-
-            if (maxScrapAmount < scrapAmount)
+            if (tile.ScrapAmount <= recyclerTile.ScrapAmount)
             {
-                buildTile = tile;
-                maxScrapAmount = scrapAmount;
+                result.Scrap += tile.ScrapAmount;
+                result.Holes++;
+            }
+            else
+            {
+                result.Scrap += recyclerTile.ScrapAmount;
             }
         }
 
-        if (buildTile != null)
+        return result;
+    }
+
+    private static void Build()
+    {
+        if (End)
         {
-            MyMatter -= 10;
-            spawnedPoints.Add(buildTile.Point);
-            actions.Add("MESSAGE Go go go");
-            actions.Add($"BUILD {buildTile.Point}");
+            actions.Add("MESSAGE Catching up Nixxa");
+            return;
+        }
+
+        while (MyMatter >= 10)
+        {
+            Tile buildTile = null;
+            int maxScrapAmount = Map.Big ? 24 : 29;
+            int maxUnits = 2;
+
+            foreach (var tile in myTiles.Values)
+            {
+                if (!tile.CanBuild ||
+                    spawnedPoints.Contains(tile.Point))
+                {
+                    continue;
+                }
+
+                var buildResult = CalcBuild(tile.Point);
+
+                if (myRecyclers.Count <= oppRecyclers.Count &&
+                    buildResult.Holes <= 3 &&
+                    maxScrapAmount < buildResult.Scrap)
+                {
+                    buildTile = tile;
+                    maxScrapAmount = buildResult.Scrap;
+                }
+
+                if (buildResult.OppUnits > maxUnits)
+                {
+                    buildTile = tile;
+                    maxScrapAmount = int.MaxValue;
+                    maxUnits = buildResult.OppUnits;
+                }
+            }
+
+            if (buildTile != null &&
+                maxScrapAmount != int.MaxValue)
+            {
+                Tiles[buildTile.Point].Recycler = true;
+                var newIslands = DetectIslands();
+                if (newIslands.Count > Islands.Count)
+                {
+                    Tiles[buildTile.Point].Recycler = false;
+                    spawnedPoints.Add(buildTile.Point);
+                    continue;
+                }
+            }
+
+            if (buildTile != null)
+            {
+                MyMatter -= 10;
+                spawnedPoints.Add(buildTile.Point);
+                Tiles[buildTile.Point].Recycler = true;
+                myRecyclers.Add(buildTile.Point, Tiles[buildTile.Point]);
+                actions.Add($"BUILD {buildTile.Point}");
+            }
+            else
+            {
+                break;
+            }
         }
     }
 
     private static void CalcMoves()
     {
+        List<Point> allTargets = new List<Point>();
+
         foreach (var myUnit in myUnits.Values)
         {
-            HashSet<Point> currentIsland = islands.FirstOrDefault(island =>
+            HashSet<Point> currentIsland = Islands.FirstOrDefault(island =>
                 island.Contains(myUnit.Point)
             );
 
@@ -314,7 +373,6 @@ internal static class Player
                 var target = nearestTargets
                     .Select(p => Tiles[p])
                     .OrderByDescending(t => t.Units)
-                    .ThenByDescending(t => t.Point.ManhattanTo(Center))
                     .FirstOrDefault();
 
                 if (target == null)
@@ -323,8 +381,24 @@ internal static class Player
                 }
 
                 target.MyForceScore += 1;
-                actions.Add($"MOVE 1 {myUnit.Point} {target.Point}");
+                allTargets.Add(target.Point);
             }
+        }
+
+        foreach (var target in allTargets)
+        {
+            HashSet<Point> currentIsland = Islands.FirstOrDefault(island =>
+                island.Contains(target)
+            );
+
+            var myUnitsInIsland = myUnits
+                .Where(u => u.Value.Units > 0)
+                .Where(u => currentIsland == null || currentIsland.Contains(u.Key))
+                .Select(u => u.Key);
+
+            var unitPoint = GetNearest(target, myUnitsInIsland, out _).FirstOrDefault();
+            myUnits[unitPoint].Units -= 1;
+            actions.Add($"MOVE 1 {unitPoint} {target}");
         }
     }
 
@@ -352,21 +426,27 @@ internal static class Player
         return nearest;
     }
 
-    private static void DetectIslands() {
-        islands.Clear();
+    private static List<HashSet<Point>> DetectIslands()
+    {
+        var result = new List<HashSet<Point>>();
         HashSet<Point> computed = new ();
         HashSet<Point> current = new ();
 
-        foreach ((var p, Tile t) in Tiles) {
-            if (t.IsHole) {
+        foreach ((var p, Tile t) in Tiles)
+        {
+            if (t.IsHole)
+            {
                 continue;
             }
-            if (!computed.Contains(p)) {
+
+            if (!computed.Contains(p))
+            {
                 Queue<Point> fifo = new ();
                 fifo.Enqueue(p);
                 computed.Add(p);
 
-                while (fifo.Count != 0) {
+                while (fifo.Count != 0)
+                {
                     Point e = fifo.Dequeue();
                     foreach (Point direction in Map.Directions(e)) {
                         Tile tile = Tiles[direction];
@@ -377,11 +457,15 @@ internal static class Player
                     }
                     current.Add(e);
                 }
-                islands.Add(new HashSet<Point>(current));
+                result.Add(new HashSet<Point>(current));
                 current.Clear();
             }
         }
+
+        return result;
     }
+
+    private static bool firstInit = true;
 
     private static void Init()
     {
@@ -393,6 +477,7 @@ internal static class Player
         myUnits.Clear();
         oppUnits.Clear();
         myRecyclers.Clear();
+        myRecyclersRange.Clear();
         oppRecyclers.Clear();
 
         actions.Clear();
@@ -424,6 +509,8 @@ internal static class Player
                     if (tile.Recycler)
                     {
                         myRecyclers.Add(point, tile);
+                        IEnumerable<Point> points = Map.Directions(point);
+                        myRecyclersRange.UnionWith(points);
                     }
                     else
                     {
@@ -460,6 +547,20 @@ internal static class Player
             }
         }
 
-        Center = Map.Center(myTiles.Keys.ToList());
+        if (firstInit)
+        {
+            MyCenter = Map.CenterRange(myTiles.Keys.ToList());
+            firstInit = false;
+        }
+
+        foreach (var (key, value) in oppWithNeutralTiles)
+        {
+            if (value.Owner == NOONE &&
+                (MyCenter.X < Map.Center.X && key.X - 1 <= MyCenter.X) ||
+                (MyCenter.X > Map.Center.X && key.X + 1 >= MyCenter.X))
+            {
+                value.MyForceScore += 1;
+            }
+        }
     }
 }
