@@ -235,7 +235,7 @@ internal static class Player
         return endGame;
     }
 
-    private record struct BuildResult(int Scrap, int Holes, int OppUnits, int OppTiles);
+    private record struct BuildResult(int Scrap, int Holes, int OppUnits, int OppTiles, int MyUnits, int MyTiles);
 
     private static BuildResult CalcBuild(Point recyclerPoint)
     {
@@ -252,6 +252,12 @@ internal static class Player
             {
                 result.OppTiles += 1;
                 result.OppUnits += tile.Units;
+            }
+
+            if (tile.Owner == ME)
+            {
+                result.MyTiles += 1;
+                result.MyUnits += tile.Units;
             }
 
             if (myRecyclersRange.Contains(tile.Point))
@@ -285,7 +291,7 @@ internal static class Player
         {
             Tile buildTile = null;
             int maxScrapAmount = Map.Big ? 19 : 24;
-            int maxUnits = 1;
+            int maxUnits = 0;
 
             foreach (var tile in myTiles.Values)
             {
@@ -297,7 +303,7 @@ internal static class Player
 
                 var buildResult = CalcBuild(tile.Point);
 
-                if (myRecyclers.Count <= oppRecyclers.Count &&
+                if (myRecyclers.Count <= oppRecyclers.Count + 1 &&
                     buildResult.Holes <= 3 &&
                     maxScrapAmount < buildResult.Scrap)
                 {
@@ -305,11 +311,11 @@ internal static class Player
                     maxScrapAmount = buildResult.Scrap;
                 }
 
-                if (buildResult.OppUnits > maxUnits)
+                if (buildResult.OppUnits - buildResult.MyUnits > maxUnits)
                 {
                     buildTile = tile;
                     maxScrapAmount = int.MaxValue;
-                    maxUnits = buildResult.OppUnits;
+                    maxUnits = buildResult.OppUnits - buildResult.MyUnits;
                 }
             }
 
