@@ -171,16 +171,21 @@ internal static class Player
                     island.Contains(myTile.Point)
                 );
 
-                var targetTiles = oppUnits.Values.ToList();
+                var targetPoints = oppTiles
+                    .Where(t => !t.Value.TurnToHole)
+                    .Select(t => t.Key)
+                    .ToList();
+
                 if (currentIsland != null)
                 {
-                    targetTiles = currentIsland
+                    targetPoints = currentIsland
                         .Select(p => Tiles[p])
-                        .Where(t => !t.TurnToHole && (!End && t.Owner == OPP) || (End && t.Owner == NOONE))
+                        .Where(t => !t.TurnToHole && (!End && t.Owner == OPP || End && t.Owner == NOONE))
+                        .Select(t => t.Point)
                         .ToList();
                 }
 
-                GetNearest(myTile.Point, targetTiles.Select(t => t.Point), out var distance);
+                GetNearest(myTile.Point, targetPoints, out var distance);
                 if (distance < minDistance)
                 {
                     spawnTile = myTile;
