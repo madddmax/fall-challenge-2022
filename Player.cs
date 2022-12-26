@@ -97,7 +97,7 @@ public class Tile
     public bool TurnToHole => InRangeOfRecycler && ScrapAmount == 1;
 }
 
-internal static class Player
+public static class Player
 {
     static readonly int ME = 1;
     static readonly int OPP = 0;
@@ -119,7 +119,7 @@ internal static class Player
     static readonly HashSet<Point> spawnedPoints = new();
 
     static bool End;
-    static Map Map;
+    public static Map Map;
     static Point MyCenter;
 
     static int MyMatter;
@@ -174,7 +174,7 @@ internal static class Player
                 var targetPoints = oppTiles
                     .Where(t => !t.Value.TurnToHole)
                     .Select(t => t.Key)
-                    .ToList();
+                    .ToHashSet();
 
                 if (currentIsland != null)
                 {
@@ -182,10 +182,10 @@ internal static class Player
                         .Select(p => Tiles[p])
                         .Where(t => !t.TurnToHole && (!End && t.Owner == OPP || End && t.Owner == NOONE))
                         .Select(t => t.Point)
-                        .ToList();
+                        .ToHashSet();
                 }
 
-                GetNearest(myTile.Point, targetPoints, out var distance);
+                GetNearest(myTile.Point, targetPoints, out int distance);
                 if (distance < minDistance)
                 {
                     spawnTile = myTile;
@@ -369,16 +369,17 @@ internal static class Player
 
             for (var u = 0; u < myUnit.Units; u++)
             {
-                var targets = targetsInIsland
+                HashSet<Point> targets = targetsInIsland
                     .Where(t => t.Value.MyForceScore == 0)
-                    .Select(t => t.Key);
+                    .Select(t => t.Key)
+                    .ToHashSet();
 
-                var nearestTargets = GetNearest(myUnit.Point, targets, out _).ToList();
+                var nearestTargets = GetNearest2(myUnit.Point, targets, out _);
                 if (!nearestTargets.Any())
                 {
                     // MyForceScore > 0
-                    targets = targetsInIsland.Select(t => t.Key);
-                    nearestTargets = GetNearest(myUnit.Point, targets, out _).ToList();
+                    targets = targetsInIsland.Select(t => t.Key).ToHashSet();
+                    nearestTargets = GetNearest2(myUnit.Point, targets, out _);
                 }
 
                 var target = nearestTargets
@@ -405,36 +406,19 @@ internal static class Player
             var myUnitsInIsland = myUnits
                 .Where(u => u.Value.Units > 0)
                 .Where(u => currentIsland == null || currentIsland.Contains(u.Key))
-                .Select(u => u.Key);
+                .Select(u => u.Key)
+                .ToHashSet();
 
-            var unitPoint = GetNearest(target, myUnitsInIsland, out _).FirstOrDefault();
-            myUnits[unitPoint].Units -= 1;
-            actions.Add($"MOVE 1 {unitPoint} {target}");
-        }
-    }
-
-    private static IEnumerable<Point> GetNearest(Point point, IEnumerable<Point> targets, out int minDistance)
-    {
-        List<Point> nearest = new List<Point>();
-        minDistance = int.MaxValue;
-
-        foreach (var target in targets)
-        {
-            var distance = point.ManhattanTo(target);
-            if (distance == minDistance)
+            var unitPoint = GetNearest2(target, myUnitsInIsland, out _);
+            if (!unitPoint.Any())
             {
-                nearest.Add(target);
+                continue;
             }
 
-            if (distance < minDistance)
-            {
-                nearest.Clear();
-                nearest.Add(target);
-                minDistance = distance;
-            }
+            var point = unitPoint.First();
+            myUnits[point].Units -= 1;
+            actions.Add($"MOVE 1 {point} {target}");
         }
-
-        return nearest;
     }
 
     private static List<HashSet<Point>> DetectIslands()
@@ -573,5 +557,83 @@ internal static class Player
                 value.MyForceScore += 1;
             }
         }
+    }
+
+    public record Node
+    {
+        public int Distance;
+        public Point Point;
+    }
+
+    public static List<Point> GetNearest(Point point, IEnumerable<Point> targets, out int minDistance)
+    {
+        List<Point> nearest = new List<Point>();
+        minDistance = int.MaxValue;
+
+        foreach (var target in targets)
+        {
+            var distance = point.ManhattanTo(target);
+            if (distance == minDistance)
+            {
+                nearest.Add(target);
+            }
+
+            if (distance < minDistance)
+            {
+                nearest.Clear();
+                nearest.Add(target);
+                minDistance = distance;
+            }
+        }
+
+        return nearest;
+    }
+
+    public static List<Point> GetNearest2(Point point, HashSet<Point> targets, out int minDistance)
+    {
+        HashSet<Point> nearest = new HashSet<Point>();
+        minDistance = Int32.MaxValue;
+
+        HashSet<Point> visited = new HashSet<Point>();
+        Queue<Node> frontier = new Queue<Node>();
+
+        var firstNode = new Node {Point = point};
+        frontier.Enqueue(firstNode);
+
+        while (frontier.Count > 0)
+        {
+            var currentNode = frontier.Dequeue();
+            if (currentNode.Distance > minDistance)
+            {
+                continue;
+            }
+
+            visited.Add(currentNode.Point);
+
+            if (targets.Contains(currentNode.Point))
+            {
+                minDistance = currentNode.Distance;
+                nearest.Add(currentNode.Point);
+                continue;
+            }
+
+            var neighbours = Map.Directions(currentNode.Point);
+            foreach (var neighbour in neighbours)
+            {
+                if (!Tiles[neighbour].IsHole &&
+                    !visited.Contains(neighbour))
+                {
+                    var neighbourNode = new Node
+                    {
+                        Point = neighbour,
+                        //Parent = currentNode,
+                        Distance = currentNode.Distance + 1
+                    };
+                    frontier.Enqueue(neighbourNode);
+                }
+            }
+        }
+
+        return nearest.ToList();
     }
 }
