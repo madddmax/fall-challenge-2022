@@ -354,70 +354,19 @@ public static class Player
 
     private static void CalcMoves()
     {
-        List<Point> allTargets = new List<Point>();
-
         foreach (var myUnit in myUnits.Values)
         {
-            HashSet<Point> currentIsland = Islands.FirstOrDefault(island =>
-                island.Contains(myUnit.Point)
-            );
-
-            var targetsInIsland = oppWithNeutralTiles
-                .Where(t => currentIsland != null && currentIsland.Contains(t.Key))
-                .Where(t => !t.Value.TurnToHole)
-                .ToList();
-
             for (var u = 0; u < myUnit.Units; u++)
             {
-                HashSet<Point> targets = targetsInIsland
-                    .Where(t => t.Value.MyForceScore == 0)
-                    .Select(t => t.Key)
-                    .ToHashSet();
-
-                var nearestTargets = GetNearest2(myUnit.Point, targets, out _);
-                if (!nearestTargets.Any())
-                {
-                    // MyForceScore > 0
-                    targets = targetsInIsland.Select(t => t.Key).ToHashSet();
-                    nearestTargets = GetNearest2(myUnit.Point, targets, out _);
-                }
-
-                var target = nearestTargets
-                    .Select(p => Tiles[p])
-                    .OrderByDescending(t => t.Units)
-                    .FirstOrDefault();
-
-                if (target == null)
+                var target = GetBestMove(myUnit.Point);
+                if (target == myUnit.Point)
                 {
                     continue;
                 }
 
-                target.MyForceScore += 1;
-                allTargets.Add(target.Point);
+                Tiles[target].MyForceScore += 1;
+                actions.Add($"MOVE 1 {myUnit.Point} {target}");
             }
-        }
-
-        foreach (var target in allTargets)
-        {
-            HashSet<Point> currentIsland = Islands.FirstOrDefault(island =>
-                island.Contains(target)
-            );
-
-            var myUnitsInIsland = myUnits
-                .Where(u => u.Value.Units > 0)
-                .Where(u => currentIsland == null || currentIsland.Contains(u.Key))
-                .Select(u => u.Key)
-                .ToHashSet();
-
-            var unitPoint = GetNearest2(target, myUnitsInIsland, out _);
-            if (!unitPoint.Any())
-            {
-                continue;
-            }
-
-            var point = unitPoint.First();
-            myUnits[point].Units -= 1;
-            actions.Add($"MOVE 1 {point} {target}");
         }
     }
 
@@ -561,8 +510,10 @@ public static class Player
 
     public record Node
     {
+        public int Score;
         public int Distance;
         public Point Point;
+        public Node Parent;
     }
 
     public static List<Point> GetNearest(Point point, IEnumerable<Point> targets, out int minDistance)
@@ -589,51 +540,77 @@ public static class Player
         return nearest;
     }
 
-    public static List<Point> GetNearest2(Point point, HashSet<Point> targets, out int minDistance)
+    public static Point GetBestMove(Point point)
     {
-        HashSet<Point> nearest = new HashSet<Point>();
-        minDistance = Int32.MaxValue;
+        int maxDistance = 10;
 
         HashSet<Point> visited = new HashSet<Point>();
         Queue<Node> frontier = new Queue<Node>();
 
         var firstNode = new Node {Point = point};
+        var bestNode = firstNode;
+
         frontier.Enqueue(firstNode);
 
         while (frontier.Count > 0)
         {
             var currentNode = frontier.Dequeue();
-            if (currentNode.Distance > minDistance)
+            if (currentNode.Distance > maxDistance)
             {
                 continue;
             }
 
             visited.Add(currentNode.Point);
 
-            if (targets.Contains(currentNode.Point))
+            if (currentNode.Score > bestNode.Score)
             {
-                minDistance = currentNode.Distance;
-                nearest.Add(currentNode.Point);
-                continue;
+                bestNode = currentNode;
             }
 
             var neighbours = Map.Directions(currentNode.Point);
             foreach (var neighbour in neighbours)
             {
-                if (!Tiles[neighbour].IsHole &&
+                var neighbourTile = Tiles[neighbour];
+
+                int tileCost = -neighbourTile.MyForceScore;
+                if (neighbourTile.Owner == OPP)
+                {
+                    tileCost += 3 + neighbourTile.Units;
+                }
+                else if (neighbourTile.Owner == ME)
+                {
+                    tileCost -= neighbourTile.Units;
+                }
+                else // NOONE
+                {
+                    tileCost += 2;
+                }
+
+                if (!neighbourTile.IsHole &&
                     !visited.Contains(neighbour))
                 {
                     var neighbourNode = new Node
                     {
                         Point = neighbour,
-                        //Parent = currentNode,
-                        Distance = currentNode.Distance + 1
+                        Parent = currentNode,
+                        Distance = currentNode.Distance + 1,
+                        Score = currentNode.Score + tileCost
                     };
                     frontier.Enqueue(neighbourNode);
                 }
             }
         }
 
-        return nearest.ToList();
+        if (bestNode == firstNode)
+        {
+            return firstNode.Point;
+        }
+
+        while (bestNode.Parent != firstNode)
+        {
+            bestNode = bestNode.Parent;
+        }
+
+        return bestNode.Point;
     }
 }
