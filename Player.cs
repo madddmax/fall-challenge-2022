@@ -297,7 +297,7 @@ public static class Player
     {
         if (End)
         {
-            actions.Add("MESSAGE Catching up Nixxa");
+            actions.Add("MESSAGE Hi RolloTomasi");
             return;
         }
 
@@ -317,7 +317,7 @@ public static class Player
 
                 var buildResult = CalcBuild(tile.Point);
 
-                if (myRecyclers.Count <= oppRecyclers.Count + 1 &&
+                if (myRecyclers.Count <= oppRecyclers.Count &&
                     buildResult.Holes <= 2 &&
                     maxScrapAmount < buildResult.Scrap)
                 {
@@ -325,7 +325,7 @@ public static class Player
                     maxScrapAmount = buildResult.Scrap;
                 }
 
-                if (buildResult.OppUnits - buildResult.MyUnits > maxUnits)
+                if (buildResult.OppUnits - buildResult.MyUnits > maxUnits + 1)
                 {
                     buildTile = tile;
                     maxScrapAmount = int.MaxValue;
@@ -541,7 +541,7 @@ public static class Player
 
     public static Node GetMoveNode(Point point)
     {
-        int maxDistance = 10;
+        int maxDistance = 9;
 
         HashSet<Point> visited = new HashSet<Point>();
         Queue<Node> frontier = new Queue<Node>();
@@ -585,7 +585,7 @@ public static class Player
                 int tileScore = 0;
                 if (neighbourTile.Owner == OPP)
                 {
-                    tileScore += 2 + neighbourTile.Units;
+                    tileScore += 2;
                 }
                 else if (neighbourTile.Owner == ME)
                 {
@@ -599,6 +599,7 @@ public static class Player
                 int distance = currentNode.Distance + 1;
 
                 if (!neighbourTile.IsHole &&
+                    !neighbourTile.TurnToHole &&
                     !visited.Contains(neighbour))
                 {
                     var neighbourNode = new Node
