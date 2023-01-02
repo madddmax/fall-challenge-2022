@@ -95,6 +95,8 @@ public class Tile
     public bool IsHole => Recycler || ScrapAmount == 0;
 
     public bool TurnToHole => InRangeOfRecycler && ScrapAmount == 1;
+
+    public bool Border;
 }
 
 public static class Player
@@ -153,55 +155,62 @@ public static class Player
 
     private static void Spawn()
     {
-        while (MyMatter >= 10)
+        List<Node> moveNodes = new List<Node>();
+
+        foreach (var myTile in myTiles.Values)
         {
-            Tile spawnTile = null;
-            int minDistance = int.MaxValue;
-            foreach (var myTile in myTiles.Values)
+            if (!myTile.CanSpawn ||
+                !myTile.Border ||
+                myTile.TurnToHole ||
+                spawnedPoints.Contains(myTile.Point))
             {
-                if (!myTile.CanSpawn ||
-                    myTile.Units >= 2 ||
-                    myTile.TurnToHole ||
-                    spawnedPoints.Contains(myTile.Point))
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                HashSet<Point> currentIsland = Islands.FirstOrDefault(island =>
-                    island.Contains(myTile.Point)
-                );
+            HashSet<Point> currentIsland = Islands.FirstOrDefault(island =>
+                island.Contains(myTile.Point)
+            );
 
-                var targetPoints = oppTiles
-                    .Where(t => !t.Value.TurnToHole)
-                    .Select(t => t.Key)
+            var targetPoints = oppTiles
+                .Where(t => !t.Value.TurnToHole)
+                .Select(t => t.Key)
+                .ToHashSet();
+
+            if (currentIsland != null)
+            {
+                targetPoints = currentIsland
+                    .Select(p => Tiles[p])
+                    .Where(t => !t.TurnToHole && (!End && t.Owner == OPP || End && t.Owner == NOONE))
+                    .Select(t => t.Point)
                     .ToHashSet();
-
-                if (currentIsland != null)
-                {
-                    targetPoints = currentIsland
-                        .Select(p => Tiles[p])
-                        .Where(t => !t.TurnToHole && (!End && t.Owner == OPP || End && t.Owner == NOONE))
-                        .Select(t => t.Point)
-                        .ToHashSet();
-                }
-
-                GetNearest(myTile.Point, targetPoints, out int distance);
-                if (distance < minDistance)
-                {
-                    spawnTile = myTile;
-                    minDistance = distance;
-                }
             }
 
-            if (spawnTile != null)
+            if (!targetPoints.Any())
             {
+                continue;
+            }
+
+            var node = GetMoveNode(myTile.Point);
+            moveNodes.Add(node);
+        }
+
+        moveNodes = moveNodes
+            .Where(n => n.Total > 0)
+            .OrderByDescending(n => n.Total)
+            .ToList();
+
+        while (MyMatter >= 10 && moveNodes.Any())
+        {
+            for (int i = 0; i < moveNodes.Count && MyMatter >= 10; i++)
+            {
+                var node = moveNodes[i];
+                while (node.Distance != 0)
+                {
+                    node = node.Parent;
+                }
+
                 MyMatter -= 10;
-                spawnedPoints.Add(spawnTile.Point);
-                actions.Add($"SPAWN {1} {spawnTile.Point}");
-            }
-            else
-            {
-                break;
+                actions.Add($"SPAWN {1} {node.Point}");
             }
         }
     }
@@ -295,7 +304,7 @@ public static class Player
         while (MyMatter >= 10)
         {
             Tile buildTile = null;
-            int maxScrapAmount = Map.Big ? 19 : 24;
+            int maxScrapAmount = Map.Big ? 14 : 19;
             int maxUnits = 0;
 
             foreach (var tile in myTiles.Values)
@@ -308,8 +317,8 @@ public static class Player
 
                 var buildResult = CalcBuild(tile.Point);
 
-                if (myRecyclers.Count <= oppRecyclers.Count &&
-                    buildResult.Holes <= 3 &&
+                if (myRecyclers.Count <= oppRecyclers.Count + 1 &&
+                    buildResult.Holes <= 2 &&
                     maxScrapAmount < buildResult.Scrap)
                 {
                     buildTile = tile;
@@ -358,12 +367,18 @@ public static class Player
         {
             for (var u = 0; u < myUnit.Units; u++)
             {
-                var target = GetBestMove(myUnit.Point);
-                if (target == myUnit.Point)
+                var node = GetMoveNode(myUnit.Point);
+                if (node.Point == myUnit.Point)
                 {
                     continue;
                 }
 
+                while (node.Parent.Point != myUnit.Point)
+                {
+                    node = node.Parent;
+                }
+
+                Point target = node.Point;
                 Tiles[target].MyForceScore += 1;
                 actions.Add($"MOVE 1 {myUnit.Point} {target}");
             }
@@ -506,41 +521,25 @@ public static class Player
                 value.MyForceScore += 1;
             }
         }
+
+        foreach (var (point, value) in myTiles)
+        {
+            var neighbours = Map.Directions(point);
+            value.Border = neighbours.Any(p => !Tiles[p].IsHole && Tiles[p].Owner != ME);
+        }
     }
 
     public record Node
     {
-        public int Score;
+        public double Total => Score - MyForce;
+        public double Score;
+        public double MyForce;
         public int Distance;
         public Point Point;
         public Node Parent;
     }
 
-    public static List<Point> GetNearest(Point point, IEnumerable<Point> targets, out int minDistance)
-    {
-        List<Point> nearest = new List<Point>();
-        minDistance = int.MaxValue;
-
-        foreach (var target in targets)
-        {
-            var distance = point.ManhattanTo(target);
-            if (distance == minDistance)
-            {
-                nearest.Add(target);
-            }
-
-            if (distance < minDistance)
-            {
-                nearest.Clear();
-                nearest.Add(target);
-                minDistance = distance;
-            }
-        }
-
-        return nearest;
-    }
-
-    public static Point GetBestMove(Point point)
+    public static Node GetMoveNode(Point point)
     {
         int maxDistance = 10;
 
@@ -549,6 +548,7 @@ public static class Player
 
         var firstNode = new Node {Point = point};
         var bestNode = firstNode;
+        var poorNode = firstNode;
 
         frontier.Enqueue(firstNode);
 
@@ -562,9 +562,18 @@ public static class Player
 
             visited.Add(currentNode.Point);
 
-            if (currentNode.Score > bestNode.Score)
+            if (currentNode.Total > bestNode.Total)
             {
                 bestNode = currentNode;
+            }
+
+            if (currentNode.Score >= poorNode.Score)
+            {
+                if (currentNode.Score > poorNode.Score ||
+                    currentNode.MyForce < poorNode.MyForce)
+                {
+                    poorNode = currentNode;
+                }
             }
 
             var neighbours = Map.Directions(currentNode.Point);
@@ -572,19 +581,22 @@ public static class Player
             {
                 var neighbourTile = Tiles[neighbour];
 
-                int tileCost = -neighbourTile.MyForceScore;
+                int myForce = neighbourTile.MyForceScore;
+                int tileScore = 0;
                 if (neighbourTile.Owner == OPP)
                 {
-                    tileCost += 2 + neighbourTile.Units;
+                    tileScore += 2 + neighbourTile.Units;
                 }
                 else if (neighbourTile.Owner == ME)
                 {
-                    tileCost -= neighbourTile.Units; // todo как то учитывать возможно в отдельном score + MyForceScore
+                    myForce += 2 + neighbourTile.Units;
                 }
                 else // NOONE
                 {
-                    tileCost += End ? 2 : 1;
+                    tileScore += End ? 2 : 1;
                 }
+
+                int distance = currentNode.Distance + 1;
 
                 if (!neighbourTile.IsHole &&
                     !visited.Contains(neighbour))
@@ -593,24 +605,15 @@ public static class Player
                     {
                         Point = neighbour,
                         Parent = currentNode,
-                        Distance = currentNode.Distance + 1,
-                        Score = currentNode.Score + tileCost
+                        Distance = distance,
+                        Score = (currentNode.Score + tileScore) / distance,
+                        MyForce = (currentNode.MyForce + myForce) / distance
                     };
                     frontier.Enqueue(neighbourNode);
                 }
             }
         }
 
-        if (bestNode == firstNode)
-        {
-            return firstNode.Point;
-        }
-
-        while (bestNode.Parent != firstNode)
-        {
-            bestNode = bestNode.Parent;
-        }
-
-        return bestNode.Point;
+        return bestNode == firstNode ? poorNode : bestNode;
     }
 }
