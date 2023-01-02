@@ -308,7 +308,7 @@ public static class Player
 
                 var buildResult = CalcBuild(tile.Point);
 
-                if (myRecyclers.Count <= oppRecyclers.Count + 1 &&
+                if (myRecyclers.Count <= oppRecyclers.Count &&
                     buildResult.Holes <= 3 &&
                     maxScrapAmount < buildResult.Scrap)
                 {
@@ -575,15 +575,15 @@ public static class Player
                 int tileCost = -neighbourTile.MyForceScore;
                 if (neighbourTile.Owner == OPP)
                 {
-                    tileCost += 3 + neighbourTile.Units;
+                    tileCost += 2 + neighbourTile.Units;
                 }
                 else if (neighbourTile.Owner == ME)
                 {
-                    tileCost -= neighbourTile.Units;
+                    tileCost -= neighbourTile.Units; // todo как то учитывать возможно в отдельном score + MyForceScore
                 }
                 else // NOONE
                 {
-                    tileCost += 2;
+                    tileCost += End ? 2 : 1;
                 }
 
                 if (!neighbourTile.IsHole &&
