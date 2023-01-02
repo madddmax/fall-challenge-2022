@@ -317,15 +317,15 @@ public static class Player
 
                 var buildResult = CalcBuild(tile.Point);
 
-                if (myRecyclers.Count <= oppRecyclers.Count &&
-                    buildResult.Holes <= 2 &&
+                if (myRecyclers.Count < oppRecyclers.Count &&
+                    buildResult.Holes < 3 &&
                     maxScrapAmount < buildResult.Scrap)
                 {
                     buildTile = tile;
                     maxScrapAmount = buildResult.Scrap;
                 }
 
-                if (buildResult.OppUnits - buildResult.MyUnits > maxUnits + 1)
+                if (buildResult.OppUnits - buildResult.MyUnits > maxUnits)
                 {
                     buildTile = tile;
                     maxScrapAmount = int.MaxValue;
@@ -585,11 +585,11 @@ public static class Player
                 int tileScore = 0;
                 if (neighbourTile.Owner == OPP)
                 {
-                    tileScore += 2;
+                    tileScore += 2 + neighbourTile.Units;
                 }
                 else if (neighbourTile.Owner == ME)
                 {
-                    myForce += 2 + neighbourTile.Units;
+                    myForce += 2 + neighbourTile.Units * 2;
                 }
                 else // NOONE
                 {
