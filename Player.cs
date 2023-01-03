@@ -390,7 +390,7 @@ public static class Player
                 }
 
                 Point target = node.Point;
-                Tiles[target].MyForceScore += 1;
+                Tiles[target].MyForceScore += 10;
                 actions.Add($"MOVE 1 {myUnit.Point} {target}");
             }
         }
