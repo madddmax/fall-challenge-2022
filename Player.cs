@@ -9,6 +9,9 @@ public readonly record struct Map(int Width, int Height)
     public readonly Point Center = new(Width / 2, Height / 2);
     public bool Big => Width >= 18;
 
+    public readonly Point CenterP1 = new(Width / 3, Height / 3);
+    public readonly Point CenterP4 = new(Width * 2 / 3, Height * 2 / 3);
+
     public IEnumerable<Point> Directions(Point point, bool withPoint = false)
     {
         if (withPoint)
@@ -145,9 +148,9 @@ public static class Player
 
             Islands = DetectIslands();
 
-            Spawn();
-
             CalcMoves();
+
+            Spawn();
 
             Console.WriteLine(actions.Any() ? string.Join(';', actions) : "WAIT");
         }
@@ -304,7 +307,7 @@ public static class Player
         while (MyMatter >= 10)
         {
             Tile buildTile = null;
-            int maxScrapAmount = Map.Big ? 14 : 19;
+            int maxScrapAmount = 10;
             int maxUnits = 0;
 
             foreach (var tile in myTiles.Values)
@@ -317,8 +320,8 @@ public static class Player
 
                 var buildResult = CalcBuild(tile.Point);
 
-                if (myRecyclers.Count < oppRecyclers.Count &&
-                    buildResult.Holes < 3 &&
+                if (myRecyclers.Count <= oppRecyclers.Count &&
+                    buildResult.Holes < 2 &&
                     maxScrapAmount < buildResult.Scrap)
                 {
                     buildTile = tile;
@@ -330,6 +333,13 @@ public static class Player
                     buildTile = tile;
                     maxScrapAmount = int.MaxValue;
                     maxUnits = buildResult.OppUnits - buildResult.MyUnits;
+                }
+
+                if (myTiles.Count > oppTiles.Count &&
+                    buildResult.OppTiles - buildResult.MyTiles >= -1)
+                {
+                    buildTile = tile;
+                    maxScrapAmount = int.MaxValue;
                 }
             }
 
@@ -375,6 +385,7 @@ public static class Player
 
                 while (node.Parent.Point != myUnit.Point)
                 {
+                    Tiles[node.Point].MyForceScore += 1;
                     node = node.Parent;
                 }
 
