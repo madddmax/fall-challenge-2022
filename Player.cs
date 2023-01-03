@@ -543,7 +543,7 @@ public static class Player
     {
         int maxDistance = 9;
 
-        HashSet<Point> visited = new HashSet<Point>();
+        Dictionary<Point, int> visited = new Dictionary<Point, int>();
         Queue<Node> frontier = new Queue<Node>();
 
         var firstNode = new Node {Point = point};
@@ -560,7 +560,7 @@ public static class Player
                 continue;
             }
 
-            visited.Add(currentNode.Point);
+            visited.TryAdd(currentNode.Point, currentNode.Distance);
 
             if (currentNode.Total > bestNode.Total)
             {
@@ -589,7 +589,7 @@ public static class Player
                 }
                 else if (neighbourTile.Owner == ME)
                 {
-                    myForce += 2 + neighbourTile.Units * 2;
+                    myForce += 2 + neighbourTile.Units;
                 }
                 else // NOONE
                 {
@@ -600,7 +600,7 @@ public static class Player
 
                 if (!neighbourTile.IsHole &&
                     !neighbourTile.TurnToHole &&
-                    !visited.Contains(neighbour))
+                    (!visited.TryGetValue(neighbour, out int d) || d == distance))
                 {
                     var neighbourNode = new Node
                     {
