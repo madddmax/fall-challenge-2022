@@ -148,6 +148,7 @@ public static class Player
 
             Islands = DetectIslands();
 
+            CalcOppMoves();
             CalcMoves();
 
             Spawn();
@@ -193,7 +194,7 @@ public static class Player
                 continue;
             }
 
-            var node = GetMovePath(myTile.Point, 1);
+            var node = GetMoveNode(myTile.Point);
             moveNodes.Add(node);
         }
 
@@ -328,8 +329,7 @@ public static class Player
                     maxScrapAmount = buildResult.Scrap;
                 }
 
-                if (myRecyclers.Count <= oppRecyclers.Count + 2 &&
-                    buildResult.OppUnits - buildResult.MyUnits > maxUnits)
+                if (buildResult.OppUnits - buildResult.MyUnits > maxUnits)
                 {
                     buildTile = tile;
                     maxScrapAmount = int.MaxValue;
@@ -378,7 +378,7 @@ public static class Player
         {
             for (var u = 0; u < myUnit.Units; u++)
             {
-                var node = GetMovePath(myUnit.Point, 10);
+                var node = GetMoveNode(myUnit.Point);
                 if (node.Point == myUnit.Point)
                 {
                     continue;
@@ -393,6 +393,31 @@ public static class Player
                 Point target = node.Point;
                 Tiles[target].MyForceScore += 10;
                 actions.Add($"MOVE 1 {myUnit.Point} {target}");
+            }
+        }
+    }
+
+    private static void CalcOppMoves()
+    {
+        foreach (var oppUnit in oppUnits.Values)
+        {
+            for (var u = 0; u < oppUnit.Units; u++)
+            {
+                var node = GetMoveNode(oppUnit.Point, 3);
+                if (node.Point == oppUnit.Point)
+                {
+                    continue;
+                }
+
+                while (node.Parent.Point != oppUnit.Point)
+                {
+                    Tiles[node.Point].MyForceScore -= 1;
+                    node = node.Parent;
+                }
+
+                Point target = node.Point;
+                Tiles[target].MyForceScore -= 1;
+                //actions.Add($"MOVE 1 {oppUnit.Point} {target}");
             }
         }
     }
@@ -551,7 +576,7 @@ public static class Player
         public Node Parent;
     }
 
-    public static Node GetMovePath(Point point, int maxDistance)
+    public static Node GetMoveNode(Point point, int maxDistance = 9)
     {
         Dictionary<Point, int> visited = new Dictionary<Point, int>();
         Queue<Node> frontier = new Queue<Node>();
@@ -625,6 +650,6 @@ public static class Player
             }
         }
 
-        return End ? poorNode : bestNode;
+        return bestNode == firstNode ? poorNode : bestNode;
     }
 }
