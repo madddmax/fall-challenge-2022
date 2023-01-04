@@ -351,7 +351,9 @@ public static class Player
                 var buildResult = CalcBuild(buildTile.Point);
 
                 var newIslands = DetectIslands(buildResult.Holes);
-                if (newIslands.Count > Islands.Count)
+                var newIslandsCount = newIslands.Count(i => i.All(p => Tiles[p].Owner != ME));
+                var islandsCount = Islands.Count(i => i.All(p => Tiles[p].Owner != ME));
+                if (newIslandsCount > islandsCount)
                 {
                     buildedPoints.Add(buildTile.Point);
                     continue;
