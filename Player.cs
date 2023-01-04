@@ -296,7 +296,7 @@ public static class Player
     {
         if (End)
         {
-            actions.Add("MESSAGE Hi RolloTomasi Hiller1233 Oakio Nixxa");
+            actions.Add("MESSAGE Bye RolloTomasi Hiller1233 Oakio Nixxa");
             return;
         }
 
@@ -640,6 +640,6 @@ public static class Player
             }
         }
 
-        return End ? poorNode : bestNode;
+        return bestNode == firstNode ? poorNode : bestNode;
     }
 }
