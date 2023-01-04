@@ -189,7 +189,7 @@ public static class Player
                 continue;
             }
 
-            var node = GetMovePath(myTile.Point, 9);
+            var node = GetMoveNode(myTile.Point);
             moveNodes.Add(node);
         }
 
@@ -329,12 +329,18 @@ public static class Player
                         maxScrapAmount = buildResult.Scrap;
                     }
 
-                    if (myRecyclers.Count < oppRecyclers.Count &&
-                        buildResult.OppUnits - buildResult.MyUnits > maxUnits)
+                    if (buildResult.OppUnits - buildResult.MyUnits > maxUnits)
                     {
                         buildTile = tile;
                         maxScrapAmount = int.MaxValue;
                         maxUnits = buildResult.OppUnits - buildResult.MyUnits;
+                    }
+
+                    if (myTiles.Count > oppTiles.Count &&
+                        buildResult.OppTiles - buildResult.MyTiles >= -1)
+                    {
+                        buildTile = tile;
+                        maxScrapAmount = int.MaxValue;
                     }
                 }
             }
@@ -348,39 +354,6 @@ public static class Player
                 var newIslandsCount = newIslands.Count(i => i.All(p => Tiles[p].Owner != ME));
                 var islandsCount = Islands.Count(i => i.All(p => Tiles[p].Owner != ME));
                 if (newIslandsCount > islandsCount)
-                {
-                    buildedPoints.Add(buildTile.Point);
-                    continue;
-                }
-
-                HashSet<Point> currentIsland = Islands.FirstOrDefault(island =>
-                    island.Contains(buildTile.Point)
-                );
-
-                bool allNone = Islands.Count > 1 &&
-                               currentIsland != null &&
-                               currentIsland
-                                   .Where(p => !buildResult.Holes.Contains(p))
-                                   .All(p => Tiles[p].Owner == NOONE);
-                if (allNone)
-                {
-                    buildedPoints.Add(buildTile.Point);
-                    continue;
-                }
-
-                bool allMyUnits = false;
-                foreach (var curr in newIslands)
-                {
-                    allMyUnits = curr.All(p => Tiles[p].Owner != OPP) &&
-                                 curr.Any(p => Tiles[p].Units > 0);
-
-                    if (allMyUnits)
-                    {
-                        break;
-                    }
-                }
-
-                if (allMyUnits)
                 {
                     buildedPoints.Add(buildTile.Point);
                     continue;
@@ -408,7 +381,7 @@ public static class Player
         {
             for (var u = 0; u < myUnit.Units; u++)
             {
-                var node = GetMovePath(myUnit.Point, 9);
+                var node = GetMoveNode(myUnit.Point);
                 if (node.Point == myUnit.Point)
                 {
                     continue;
@@ -593,8 +566,10 @@ public static class Player
         public Node Parent;
     }
 
-    public static Node GetMovePath(Point point, int maxDistance)
+    public static Node GetMoveNode(Point point)
     {
+        int maxDistance = 9;
+
         Dictionary<Point, int> visited = new Dictionary<Point, int>();
         Queue<Node> frontier = new Queue<Node>();
 
