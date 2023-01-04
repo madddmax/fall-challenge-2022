@@ -121,7 +121,7 @@ public static class Player
 
     static List<HashSet<Point>> Islands = new();
     static readonly List<string> actions = new();
-    static readonly HashSet<Point> spawnedPoints = new();
+    static readonly HashSet<Point> buildedPoints = new();
 
     static bool End;
     public static Map Map;
@@ -144,11 +144,11 @@ public static class Player
 
             End = EndGame();
 
+            CalcMoves();
+
             Build();
 
             Islands = DetectIslands();
-
-            CalcMoves();
 
             Spawn();
 
@@ -165,7 +165,7 @@ public static class Player
             if (!myTile.CanSpawn ||
                 !myTile.Border ||
                 myTile.TurnToHole ||
-                spawnedPoints.Contains(myTile.Point))
+                buildedPoints.Contains(myTile.Point))
             {
                 continue;
             }
@@ -193,7 +193,7 @@ public static class Player
                 continue;
             }
 
-            var node = GetMoveNode(myTile.Point);
+            var node = GetMoveNode(myTile.Point, 9);
             moveNodes.Add(node);
         }
 
@@ -300,7 +300,7 @@ public static class Player
     {
         if (End)
         {
-            actions.Add("MESSAGE Hi RolloTomasi");
+            actions.Add("MESSAGE Hi RolloTomasi Hiller1233 Oakio Nixxa");
             return;
         }
 
@@ -310,36 +310,43 @@ public static class Player
             int maxScrapAmount = 10;
             int maxUnits = 0;
 
-            foreach (var tile in myTiles.Values)
+            for (int maxHoles = 4; maxHoles >= 2 && buildTile == null; maxHoles--)
             {
-                if (!tile.CanBuild ||
-                    spawnedPoints.Contains(tile.Point))
-                {
-                    continue;
-                }
+                maxScrapAmount = 5 * maxHoles;
 
-                var buildResult = CalcBuild(tile.Point);
-
-                if (myRecyclers.Count <= oppRecyclers.Count &&
-                    buildResult.Holes < 2 &&
-                    maxScrapAmount < buildResult.Scrap)
+                foreach (var tile in myTiles.Values)
                 {
-                    buildTile = tile;
-                    maxScrapAmount = buildResult.Scrap;
-                }
+                    if (!tile.CanBuild ||
+                        buildedPoints.Contains(tile.Point) ||
+                        tile.MyForceScore >= 10)
+                    {
+                        continue;
+                    }
 
-                if (buildResult.OppUnits - buildResult.MyUnits > maxUnits)
-                {
-                    buildTile = tile;
-                    maxScrapAmount = int.MaxValue;
-                    maxUnits = buildResult.OppUnits - buildResult.MyUnits;
-                }
+                    var buildResult = CalcBuild(tile.Point);
 
-                if (myTiles.Count > oppTiles.Count &&
-                    buildResult.OppTiles - buildResult.MyTiles >= -1)
-                {
-                    buildTile = tile;
-                    maxScrapAmount = int.MaxValue;
+                    if (myRecyclers.Count <= oppRecyclers.Count &&
+                        buildResult.Holes < maxHoles &&
+                        maxScrapAmount < buildResult.Scrap)
+                    {
+                        buildTile = tile;
+                        maxScrapAmount = buildResult.Scrap;
+                    }
+
+                    if (myRecyclers.Count <= oppRecyclers.Count &&
+                        buildResult.OppUnits - buildResult.MyUnits > maxUnits)
+                    {
+                        buildTile = tile;
+                        maxScrapAmount = int.MaxValue;
+                        maxUnits = buildResult.OppUnits - buildResult.MyUnits;
+                    }
+
+                    if (myTiles.Count > oppTiles.Count &&
+                        buildResult.OppTiles - buildResult.MyTiles >= -1)
+                    {
+                        buildTile = tile;
+                        maxScrapAmount = int.MaxValue;
+                    }
                 }
             }
 
@@ -351,7 +358,7 @@ public static class Player
                 if (newIslands.Count > Islands.Count)
                 {
                     Tiles[buildTile.Point].Recycler = false;
-                    spawnedPoints.Add(buildTile.Point);
+                    buildedPoints.Add(buildTile.Point);
                     continue;
                 }
             }
@@ -359,7 +366,7 @@ public static class Player
             if (buildTile != null)
             {
                 MyMatter -= 10;
-                spawnedPoints.Add(buildTile.Point);
+                buildedPoints.Add(buildTile.Point);
                 Tiles[buildTile.Point].Recycler = true;
                 myRecyclers.Add(buildTile.Point, Tiles[buildTile.Point]);
                 actions.Add($"BUILD {buildTile.Point}");
@@ -451,7 +458,7 @@ public static class Player
         oppRecyclers.Clear();
 
         actions.Clear();
-        spawnedPoints.Clear();
+        buildedPoints.Clear();
 
         var inputs = Console.ReadLine().Split(' ');
         MyMatter = int.Parse(inputs[0]);
@@ -550,10 +557,8 @@ public static class Player
         public Node Parent;
     }
 
-    public static Node GetMoveNode(Point point)
+    public static Node GetMoveNode(Point point, int maxDistance = 9)
     {
-        int maxDistance = 9;
-
         Dictionary<Point, int> visited = new Dictionary<Point, int>();
         Queue<Node> frontier = new Queue<Node>();
 
@@ -626,6 +631,6 @@ public static class Player
             }
         }
 
-        return bestNode == firstNode ? poorNode : bestNode;
+        return End ? poorNode : bestNode;
     }
 }
