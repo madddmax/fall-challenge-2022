@@ -148,7 +148,6 @@ public static class Player
 
             Islands = DetectIslands();
 
-            CalcOppMoves();
             CalcMoves();
 
             Spawn();
@@ -397,31 +396,6 @@ public static class Player
         }
     }
 
-    private static void CalcOppMoves()
-    {
-        foreach (var oppUnit in oppUnits.Values)
-        {
-            for (var u = 0; u < oppUnit.Units; u++)
-            {
-                var node = GetMoveNode(oppUnit.Point, 3);
-                if (node.Point == oppUnit.Point)
-                {
-                    continue;
-                }
-
-                while (node.Parent.Point != oppUnit.Point)
-                {
-                    Tiles[node.Point].MyForceScore -= 1;
-                    node = node.Parent;
-                }
-
-                Point target = node.Point;
-                Tiles[target].MyForceScore -= 1;
-                //actions.Add($"MOVE 1 {oppUnit.Point} {target}");
-            }
-        }
-    }
-
     private static List<HashSet<Point>> DetectIslands()
     {
         var result = new List<HashSet<Point>>();
@@ -576,8 +550,10 @@ public static class Player
         public Node Parent;
     }
 
-    public static Node GetMoveNode(Point point, int maxDistance = 9)
+    public static Node GetMoveNode(Point point)
     {
+        int maxDistance = 9;
+
         Dictionary<Point, int> visited = new Dictionary<Point, int>();
         Queue<Node> frontier = new Queue<Node>();
 
