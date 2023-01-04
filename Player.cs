@@ -193,7 +193,7 @@ public static class Player
                 continue;
             }
 
-            var node = GetMoveNode(myTile.Point, 9);
+            var node = GetMoveNode(myTile.Point);
             moveNodes.Add(node);
         }
 
@@ -310,43 +310,37 @@ public static class Player
             int maxScrapAmount = 10;
             int maxUnits = 0;
 
-            for (int maxHoles = 4; maxHoles >= 2 && buildTile == null; maxHoles--)
+            foreach (var tile in myTiles.Values)
             {
-                maxScrapAmount = 5 * maxHoles;
-
-                foreach (var tile in myTiles.Values)
+                if (!tile.CanBuild ||
+                    buildedPoints.Contains(tile.Point) ||
+                    tile.MyForceScore >= 10)
                 {
-                    if (!tile.CanBuild ||
-                        buildedPoints.Contains(tile.Point) ||
-                        tile.MyForceScore >= 10)
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    var buildResult = CalcBuild(tile.Point);
+                var buildResult = CalcBuild(tile.Point);
 
-                    if (myRecyclers.Count <= oppRecyclers.Count &&
-                        buildResult.Holes < maxHoles &&
-                        maxScrapAmount < buildResult.Scrap)
-                    {
-                        buildTile = tile;
-                        maxScrapAmount = buildResult.Scrap;
-                    }
+                if (myRecyclers.Count <= oppRecyclers.Count &&
+                    buildResult.Holes < 2 &&
+                    maxScrapAmount < buildResult.Scrap)
+                {
+                    buildTile = tile;
+                    maxScrapAmount = buildResult.Scrap;
+                }
 
-                    if (myRecyclers.Count <= oppRecyclers.Count &&
-                        buildResult.OppUnits - buildResult.MyUnits > maxUnits)
-                    {
-                        buildTile = tile;
-                        maxScrapAmount = int.MaxValue;
-                        maxUnits = buildResult.OppUnits - buildResult.MyUnits;
-                    }
+                if (buildResult.OppUnits - buildResult.MyUnits > maxUnits)
+                {
+                    buildTile = tile;
+                    maxScrapAmount = int.MaxValue;
+                    maxUnits = buildResult.OppUnits - buildResult.MyUnits;
+                }
 
-                    if (myTiles.Count > oppTiles.Count &&
-                        buildResult.OppTiles - buildResult.MyTiles >= -1)
-                    {
-                        buildTile = tile;
-                        maxScrapAmount = int.MaxValue;
-                    }
+                if (myTiles.Count > oppTiles.Count &&
+                    buildResult.OppTiles - buildResult.MyTiles >= -1)
+                {
+                    buildTile = tile;
+                    maxScrapAmount = int.MaxValue;
                 }
             }
 
@@ -557,8 +551,10 @@ public static class Player
         public Node Parent;
     }
 
-    public static Node GetMoveNode(Point point, int maxDistance = 9)
+    public static Node GetMoveNode(Point point)
     {
+        int maxDistance = 9;
+
         Dictionary<Point, int> visited = new Dictionary<Point, int>();
         Queue<Node> frontier = new Queue<Node>();
 
