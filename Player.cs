@@ -337,6 +337,7 @@ public static class Player
                     }
 
                     if (myTiles.Count > oppTiles.Count &&
+                        buildResult.OppTiles > 0 &&
                         buildResult.OppTiles - buildResult.MyTiles >= -1)
                     {
                         buildTile = tile;
