@@ -538,7 +538,19 @@ public static class Player
         foreach (var (point, value) in myTiles)
         {
             var neighbours = Map.Directions(point);
-            value.Border = neighbours.Any(p => !Tiles[p].IsHole && Tiles[p].Owner != ME);
+            value.Border = neighbours.Any(p => !Tiles[p].IsHole && !Tiles[p].TurnToHole && Tiles[p].Owner != ME);
+        }
+
+        foreach (var (point, value) in oppTiles)
+        {
+            var neighbours = Map.Directions(point);
+            value.Border = neighbours.Any(p => !Tiles[p].IsHole && !Tiles[p].TurnToHole && Tiles[p].Owner != OPP);
+        }
+
+        foreach (var (key, value) in neutralTiles)
+        {
+            var borders = Map.Directions(key).Any(p => Tiles[p].Owner == OPP && Tiles[p].Border);
+            value.MyForceScore -= borders ? 10 : 0;
         }
     }
 
