@@ -310,37 +310,42 @@ public static class Player
             int maxScrapAmount = 10;
             int maxUnits = 0;
 
-            foreach (var tile in myTiles.Values)
+            for (int maxHoles = 4; maxHoles >= 2 && buildTile == null; maxHoles--)
             {
-                if (!tile.CanBuild ||
-                    buildedPoints.Contains(tile.Point) ||
-                    tile.MyForceScore >= 10)
-                {
-                    continue;
-                }
+                maxScrapAmount = 5 * maxHoles + (maxHoles - 2);
 
-                var buildResult = CalcBuild(tile.Point);
-
-                if (myRecyclers.Count <= oppRecyclers.Count &&
-                    buildResult.Holes < 2 &&
-                    maxScrapAmount < buildResult.Scrap)
+                foreach (var tile in myTiles.Values)
                 {
-                    buildTile = tile;
-                    maxScrapAmount = buildResult.Scrap;
-                }
+                    if (!tile.CanBuild ||
+                        buildedPoints.Contains(tile.Point) ||
+                        tile.MyForceScore >= 10)
+                    {
+                        continue;
+                    }
 
-                if (buildResult.OppUnits - buildResult.MyUnits > maxUnits)
-                {
-                    buildTile = tile;
-                    maxScrapAmount = int.MaxValue;
-                    maxUnits = buildResult.OppUnits - buildResult.MyUnits;
-                }
+                    var buildResult = CalcBuild(tile.Point);
 
-                if (myTiles.Count > oppTiles.Count &&
-                    buildResult.OppTiles - buildResult.MyTiles >= -1)
-                {
-                    buildTile = tile;
-                    maxScrapAmount = int.MaxValue;
+                    if (myRecyclers.Count <= oppRecyclers.Count &&
+                        buildResult.Holes < maxHoles &&
+                        maxScrapAmount < buildResult.Scrap)
+                    {
+                        buildTile = tile;
+                        maxScrapAmount = buildResult.Scrap;
+                    }
+
+                    if (buildResult.OppUnits - buildResult.MyUnits > maxUnits)
+                    {
+                        buildTile = tile;
+                        maxScrapAmount = int.MaxValue;
+                        maxUnits = buildResult.OppUnits - buildResult.MyUnits;
+                    }
+
+                    if (myTiles.Count > oppTiles.Count &&
+                        buildResult.OppTiles - buildResult.MyTiles >= -1)
+                    {
+                        buildTile = tile;
+                        maxScrapAmount = int.MaxValue;
+                    }
                 }
             }
 
