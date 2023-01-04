@@ -7,10 +7,6 @@ namespace FallChallenge2022;
 public readonly record struct Map(int Width, int Height)
 {
     public readonly Point Center = new(Width / 2, Height / 2);
-    public bool Big => Width >= 18;
-
-    public readonly Point CenterP1 = new(Width / 3, Height / 3);
-    public readonly Point CenterP4 = new(Width * 2 / 3, Height * 2 / 3);
 
     public IEnumerable<Point> Directions(Point point, bool withPoint = false)
     {
@@ -148,7 +144,7 @@ public static class Player
 
             Build();
 
-            Islands = DetectIslands();
+            Islands = DetectIslands(new HashSet<Point>());
 
             Spawn();
 
@@ -252,11 +248,11 @@ public static class Player
         return endGame;
     }
 
-    private record struct BuildResult(int Scrap, int Holes, int OppUnits, int OppTiles, int MyUnits, int MyTiles);
+    private record struct BuildResult(int Scrap, HashSet<Point> Holes, int OppUnits, int OppTiles, int MyUnits, int MyTiles);
 
     private static BuildResult CalcBuild(Point recyclerPoint)
     {
-        var result = new BuildResult();
+        var result = new BuildResult {Holes = new HashSet<Point>()};
 
         var recyclerTile = Tiles[recyclerPoint];
         var otherTiles = Map
@@ -285,7 +281,7 @@ public static class Player
             if (tile.ScrapAmount <= recyclerTile.ScrapAmount)
             {
                 result.Scrap += tile.ScrapAmount;
-                result.Holes++;
+                result.Holes.Add(tile.Point);
             }
             else
             {
@@ -326,7 +322,7 @@ public static class Player
                     var buildResult = CalcBuild(tile.Point);
 
                     if (myRecyclers.Count <= oppRecyclers.Count &&
-                        buildResult.Holes < maxHoles &&
+                        buildResult.Holes.Count < maxHoles &&
                         maxScrapAmount < buildResult.Scrap)
                     {
                         buildTile = tile;
@@ -352,11 +348,11 @@ public static class Player
             if (buildTile != null &&
                 maxScrapAmount != int.MaxValue)
             {
-                Tiles[buildTile.Point].Recycler = true;
-                var newIslands = DetectIslands();
+                var buildResult = CalcBuild(buildTile.Point);
+
+                var newIslands = DetectIslands(buildResult.Holes);
                 if (newIslands.Count > Islands.Count)
                 {
-                    Tiles[buildTile.Point].Recycler = false;
                     buildedPoints.Add(buildTile.Point);
                     continue;
                 }
@@ -402,7 +398,7 @@ public static class Player
         }
     }
 
-    private static List<HashSet<Point>> DetectIslands()
+    private static List<HashSet<Point>> DetectIslands(HashSet<Point> holes)
     {
         var result = new List<HashSet<Point>>();
         HashSet<Point> computed = new ();
@@ -410,7 +406,7 @@ public static class Player
 
         foreach ((var p, Tile t) in Tiles)
         {
-            if (t.IsHole)
+            if (t.IsHole || holes.Contains(t.Point))
             {
                 continue;
             }
@@ -426,7 +422,7 @@ public static class Player
                     Point e = fifo.Dequeue();
                     foreach (Point direction in Map.Directions(e)) {
                         Tile tile = Tiles[direction];
-                        if (!tile.IsHole && !computed.Contains(direction)) {
+                        if (!tile.IsHole && !holes.Contains(tile.Point) && !computed.Contains(direction)) {
                             fifo.Enqueue(direction);
                             computed.Add(direction);
                         }
