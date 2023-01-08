@@ -60,8 +60,6 @@ public readonly record struct Map(int Width, int Height)
 
 public readonly record struct Point(int X, int Y)
 {
-    public int ManhattanTo(Point other) => Math.Abs(other.X - X) + Math.Abs(other.Y - Y);
-
     public override string ToString() => $"{X} {Y}";
 }
 
@@ -108,7 +106,6 @@ public static class Player
     static readonly Dictionary<Point, Tile> myTiles = new();
     static readonly Dictionary<Point, Tile> oppTiles = new();
     static readonly Dictionary<Point, Tile> neutralTiles = new();
-    static readonly Dictionary<Point, Tile> oppWithNeutralTiles = new();
     static readonly Dictionary<Point, Tile> myUnits = new();
     static readonly Dictionary<Point, Tile> oppUnits = new();
     static readonly Dictionary<Point, Tile> myRecyclers = new();
@@ -189,7 +186,7 @@ public static class Player
                 continue;
             }
 
-            var node = GetMoveNode(myTile.Point);
+            var node = GetMovePath(myTile.Point);
             moveNodes.Add(node);
         }
 
@@ -382,7 +379,7 @@ public static class Player
         {
             for (var u = 0; u < myUnit.Units; u++)
             {
-                var node = GetMoveNode(myUnit.Point);
+                var node = GetMovePath(myUnit.Point);
                 if (node.Point == myUnit.Point)
                 {
                     continue;
@@ -448,7 +445,6 @@ public static class Player
         myTiles.Clear();
         oppTiles.Clear();
         neutralTiles.Clear();
-        oppWithNeutralTiles.Clear();
         myUnits.Clear();
         oppUnits.Clear();
         myRecyclers.Clear();
@@ -484,7 +480,7 @@ public static class Player
                     if (tile.Recycler)
                     {
                         myRecyclers.Add(point, tile);
-                        IEnumerable<Point> points = Map.Directions(point);
+                        IEnumerable<Point> points = Map.Directions(point, true);
                         myRecyclersRange.UnionWith(points);
                     }
                     else
@@ -506,7 +502,6 @@ public static class Player
                     else
                     {
                         oppTiles.Add(point, tile);
-                        oppWithNeutralTiles.Add(point, tile);
 
                         if (tile.Units > 0)
                         {
@@ -517,7 +512,6 @@ public static class Player
                 else if (tile.ScrapAmount != 0)
                 {
                     neutralTiles.Add(point, tile);
-                    oppWithNeutralTiles.Add(point, tile);
                 }
             }
         }
@@ -528,10 +522,9 @@ public static class Player
             firstInit = false;
         }
 
-        foreach (var (key, value) in oppWithNeutralTiles)
+        foreach (var (key, value) in neutralTiles)
         {
-            if (value.Owner == NOONE &&
-                (MyCenter.X < Map.Center.X && key.X - 1 <= MyCenter.X) ||
+            if ((MyCenter.X < Map.Center.X && key.X - 1 <= MyCenter.X) ||
                 (MyCenter.X > Map.Center.X && key.X + 1 >= MyCenter.X))
             {
                 value.MyForceScore += 1;
@@ -567,7 +560,7 @@ public static class Player
         public Node Parent;
     }
 
-    public static Node GetMoveNode(Point point)
+    public static Node GetMovePath(Point point)
     {
         int maxDistance = 9;
 
